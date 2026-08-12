@@ -1,61 +1,104 @@
-# ADR-0002 — Supabase Project Unreachable: Adopt a Clean Canonical Baseline
+# ADR-0002 — No Existing Database State: Adopt a Clean Canonical Baseline
 
-- **Status:** Accepted
+- **Status:** Accepted (revised 2026-08-12 after direct verification)
 - **Date:** 2026-08-12
 - **Deciders:** Lead Architect (autonomous mandate)
 - **Supersedes:** the backfill-and-migrate strategy in `03_DATABASE_REDESIGN.md` §5
 
+## Correction to the first revision of this ADR
+
+The first version of this document asserted that the Supabase project had been
+**deleted**, based on its hostname returning `NXDOMAIN` across repeated attempts
+while unrelated third-party domains resolved normally.
+
+**That conclusion was wrong.** The project exists. It was almost certainly
+*paused* — Supabase suspends idle free-tier projects and withdraws their DNS
+record, which is indistinguishable from deletion by DNS alone. Signing in to the
+dashboard restored it, and the host now resolves and serves HTTP.
+
+The decision below is unchanged, but it now rests on verified evidence rather
+than an incorrect inference. The distinction matters: "deleted" and "empty"
+imply very different risks, and only one of them was true.
+
 ## Context
 
-The audit identified severe schema drift (`PROJECT_AUDIT.md` BLOCKER-4): migration `00017_architecture_pivot_sites.sql` contains an unconditional
-`ALTER TABLE attendance ADD COLUMN working_hours` that collides with a column migration 013 already added, and uses `uuid_generate_v4()` and `moddatetime()` without any `CREATE EXTENSION`. It therefore cannot have applied successfully. The live database state was unknown, so Phase 0 called for establishing ground truth by introspecting the running project.
+The audit identified severe schema drift (`PROJECT_AUDIT.md` BLOCKER-4).
+Migration `00017_architecture_pivot_sites.sql` contains an unconditional
+`ALTER TABLE attendance ADD COLUMN working_hours` colliding with a column
+migration 013 already added, and uses `uuid_generate_v4()` and `moddatetime()`
+with no `CREATE EXTENSION`. It cannot have applied cleanly.
 
-Introspection was attempted against the project URL in `.env.local`. The host does not resolve:
+Two Supabase projects are now in play:
+
+| Project | Status |
+|---|---|
+| `hebgjskikjfbfdkesxaq` (original) | Alive, responds to REST |
+| `znwvqdyrvtteirpjecfx` (newly created by the owner) | Alive |
+
+The original project was probed for all 27 tables defined across migrations
+001–018, using its publishable key:
 
 ```
-NXDOMAIN  <project-ref>.supabase.co
-OK        www.google.com
-OK        raw.githubusercontent.com
-OK        registry.npmjs.org
-OK        supabase.com
+EXISTS  (0)
+MISSING (27): profiles, company_settings, sequences, customers, quotations,
+              quotation_items, work_orders, invoices, invoice_items, payments,
+              expenses, expense_items, attendance, leave_requests, documents,
+              audit_logs, projects, project_assignments, project_documents,
+              work_logs, work_log_photos, salary_advances, payroll,
+              submissions, sites, site_assignments, cash_transfers
 ```
 
-Arbitrary third-party subdomains resolve normally, so this is not sandbox DNS filtering. Supabase deletes the DNS record for a project only once the project itself is removed. **The Supabase project referenced by this repository no longer exists.**
-
-Consequently:
-- There is no production data to preserve.
-- There is no live schema to reconcile against.
-- The credentials in `.env.local` are inert.
+Every table returns PostgREST `PGRST205` — the relation does not exist. **The
+migrations were never applied to this project.** There is no schema and no data.
 
 ## Decision
 
-Abandon the incremental migrate-and-backfill strategy. Instead:
+Abandon the incremental migrate-and-backfill strategy:
 
-1. **Author a single canonical baseline migration** implementing the Company → Contract → Site model from `03_DATABASE_REDESIGN.md` directly. No preservation of migrations 001–018.
-2. **Archive** migrations 001–018 under `supabase/migrations/_archive/` as historical reference; they are not part of the applied set.
-3. **Verify locally** using the Supabase CLI against Docker (confirmed available in this environment), so `supabase db reset` reproduces the schema deterministically from source.
-4. **Keep every migration reversible** — each forward migration ships with a matching `down` section, since there is no longer any excuse for irreversible steps.
-5. Senthil provisions a **new Supabase project** when ready to deploy; the baseline applies cleanly to an empty database.
+1. **Author a single canonical baseline migration** implementing the
+   Company → Contract → Site model from `03_DATABASE_REDESIGN.md` directly.
+2. **Archive** migrations 001–018 under `supabase/migrations/_archive/` as
+   historical reference. They are not part of the applied set and never were.
+3. **Verify locally** with the Supabase CLI against Docker (confirmed available),
+   so `supabase db reset` reproduces the schema deterministically from source.
+4. **Keep every migration reversible** — each forward migration ships with a
+   matching down section.
+5. Target the **new project** (`znwvqdyrvtteirpjecfx`). Both are empty, so the
+   choice is arbitrary on technical grounds; the new one is the owner's active
+   workspace and avoids confusion with stale credentials.
 
 ## Consequences
 
 **Positive**
-- The single riskiest item in the entire plan — migrating live financial data across a three-way hierarchy collapse — disappears entirely.
-- No `_migration_orphans` quarantine table, no fuzzy `client_company` text-to-FK resolution, no reconciliation of row counts and financial totals.
-- The baseline can be written correctly from first principles rather than as a sequence of corrective patches over a broken history.
-- Local-first development with `supabase db reset` becomes the verification loop, which is strictly better than the previous SQL-editor-paste workflow that caused the drift.
+- The riskiest item in the plan — migrating live financial data across a
+  three-way hierarchy collapse — does not exist. No `_migration_orphans`
+  quarantine, no fuzzy `client_company` text-to-FK resolution, no financial
+  reconciliation.
+- The baseline is written correctly from first principles rather than as
+  corrective patches over a broken history.
+- Local-first development via `supabase db reset` replaces the SQL-editor-paste
+  workflow that produced the drift.
 
 **Negative**
-- Any data that existed in the deleted project is unrecoverable. Nothing can be done about this now; it is a statement of fact, not a trade-off.
-- A new Supabase project must be created and its keys placed in `.env.local` before the app can run against a real backend. Until then the app builds and typechecks but cannot serve data.
+- None material. There was no data to lose.
 
 **Neutral**
-- The credentials currently in `.env.local` point at a non-existent project. They should still be rotated out of the file rather than left in place, on the general principle that dead credentials teach bad habits.
+- The original project can be deleted once the new one is confirmed working,
+  removing the ambiguity of two live projects with similar names.
+
+## Verification method (for future reference)
+
+DNS resolution alone is **not** sufficient evidence about a Supabase project's
+existence, because paused projects lose their DNS record. To determine real
+state, probe the REST endpoint for known tables and inspect the error codes:
+
+- `PGRST205` / "does not exist" → table absent
+- `401` with "No API key found" → project alive, key missing
+- `401` with "Secret API key required" → project alive, endpoint needs the
+  secret key (the OpenAPI root does; table endpoints accept the publishable key)
 
 ## Action required from the owner
 
-1. Create a new Supabase project.
-2. Put its URL, anon key, and service-role key into `.env.local`.
-3. Run `npm run db:reset` (local) or apply the baseline migration to the new project.
-
-Until step 1 completes, verification is limited to local Docker Postgres — which is sufficient for every gate in Phases 0 and 1.
+1. Use the new project's URL and keys (see `/setup-required` in the running app
+   for the exact variable names).
+2. Apply the Phase 1 baseline migration once authored.

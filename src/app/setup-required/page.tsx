@@ -16,12 +16,12 @@ const REQUIRED = [
     hint: "Supabase → Project Settings → Data API → Project URL",
   },
   {
-    name: "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    hint: "Supabase → Project Settings → API Keys → anon / publishable",
+    name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+    hint: "Supabase → Project Settings → API Keys → publishable. Safe to expose; it ships in the browser bundle. The legacy name NEXT_PUBLIC_SUPABASE_ANON_KEY also works.",
   },
   {
-    name: "SUPABASE_SERVICE_ROLE_KEY",
-    hint: "Same page → service_role / secret. Server-side only — never exposed to the browser.",
+    name: "SUPABASE_SECRET_KEY",
+    hint: "Same page → secret. Server-side only — never commit it or paste it anywhere public. Legacy name SUPABASE_SERVICE_ROLE_KEY also works.",
   },
   {
     name: "NEXT_PUBLIC_APP_URL",

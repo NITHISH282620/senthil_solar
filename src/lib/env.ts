@@ -28,12 +28,41 @@ function isUnset(value: string | undefined): boolean {
   );
 }
 
+/**
+ * Supabase renamed its client-side key from "anon" to "publishable" (and
+ * "service_role" to "secret"). Its own Next.js scaffolding now emits
+ * NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, while older guides and this codebase
+ * used NEXT_PUBLIC_SUPABASE_ANON_KEY. Accept either so that copying the
+ * snippet straight out of the Supabase dashboard just works.
+ *
+ * NOTE: these values MUST be referenced as full literal `process.env.X`
+ * expressions. Next.js inlines NEXT_PUBLIC_* at build time by static text
+ * substitution — dynamic lookups like process.env[name] are not replaced and
+ * would be undefined in the browser bundle.
+ */
+function publishableKey(): string | undefined {
+  const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!isUnset(publishable)) return publishable;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!isUnset(anon)) return anon;
+  return undefined;
+}
+
 /** Public Supabase config, or null when the deployment is not configured. */
 export function getSupabaseEnv(): SupabaseEnv | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (isUnset(url) || isUnset(anonKey)) return null;
-  return { url: url!, anonKey: anonKey! };
+  const key = publishableKey();
+  if (isUnset(url) || isUnset(key)) return null;
+  return { url: url!, anonKey: key! };
+}
+
+/** Server-side secret key, under either the new or legacy name. */
+export function getServiceRoleKey(): string | undefined {
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!isUnset(secret)) return secret;
+  const legacy = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!isUnset(legacy)) return legacy;
+  return undefined;
 }
 
 export function isSupabaseConfigured(): boolean {
@@ -60,8 +89,7 @@ export function missingEnvVars(): string[] {
   const missing: string[] = [];
   if (isUnset(process.env.NEXT_PUBLIC_SUPABASE_URL))
     missing.push("NEXT_PUBLIC_SUPABASE_URL");
-  if (isUnset(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))
-    missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!publishableKey()) missing.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
   return missing;
 }
 
@@ -70,9 +98,20 @@ export function missingEnvVars(): string[] {
  */
 export function missingServerEnvVars(): string[] {
   const missing: string[] = [];
-  if (isUnset(process.env.SUPABASE_SERVICE_ROLE_KEY))
-    missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!getServiceRoleKey()) missing.push("SUPABASE_SECRET_KEY");
   return missing;
+}
+
+/**
+ * Guards against the most likely misconfiguration: pointing a new deployment
+ * at a Supabase project that no longer exists. Returns the project ref parsed
+ * out of the URL, or null if the URL is not a Supabase host.
+ */
+export function supabaseProjectRef(): string | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (isUnset(url)) return null;
+  const m = /^https:\/\/([a-z0-9]+)\.supabase\.(co|in)/i.exec(url!.trim());
+  return m ? m[1] : null;
 }
 
 /**
