@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema, forgotPasswordSchema } from "@/lib/validations";
+import { getAppUrl } from "@/lib/env";
 import type { Profile } from "@/types/database";
 
 export async function loginAction(formData: FormData) {
@@ -46,8 +47,8 @@ export async function forgotPasswordAction(formData: FormData) {
 
   const supabase = await createClient();
 
-  // Use the app's own URL for the redirect, not the Supabase project URL
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // The app's own URL, not the Supabase project URL.
+  const appUrl = getAppUrl();
 
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${appUrl}/auth/callback?next=/reset-password`,
