@@ -1,0 +1,298 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "./auth";
+import {
+  quotationDataSchema,
+  quotationLineItemSchema,
+  quotationStatusSchema,
+  sanitizeSearchInput,
+} from "@/lib/validations";
+import { z } from "zod";
+import type { Quotation, QuotationItem, Customer } from "@/types/database";
+
+export interface QuotationWithRelations extends Quotation {
+  customer?: Pick<Customer, "id" | "name" | "customer_id"> | null;
+  quotation_items?: QuotationItem[];
+}
+
+/**
+ * Fetch all quotations with customer name
+ */
+export async function getQuotations(params?: {
+  search?: string;
+  status?: string;
+  customer_id?: string;
+}): Promise<{
+  data: QuotationWithRelations[] | null;
+  error: string | null;
+}> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("quotations")
+    .select("*, customer:customers!quotations_customer_id_fkey(id, name, customer_id)")
+    .order("created_at", { ascending: false });
+
+  if (params?.search) {
+    const safe = sanitizeSearchInput(params.search);
+    if (safe) {
+      query = query.or(
+        `title.ilike.%${safe}%,quotation_number.ilike.%${safe}%`
+      );
+    }
+  }
+
+  if (params?.status && params.status !== "all") {
+    query = query.eq("status", params.status);
+  }
+
+  if (params?.customer_id) {
+    query = query.eq("customer_id", params.customer_id);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: data as QuotationWithRelations[], error: null };
+}
+
+/**
+ * Get single quotation with items
+ */
+export async function getQuotation(
+  id: string
+): Promise<{ data: QuotationWithRelations | null; error: string | null }> {
+  const supabase = await createClient();
+
+  const { data: quotation, error } = await supabase
+    .from("quotations")
+    .select("*, customer:customers!quotations_customer_id_fkey(id, name, customer_id)")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  // Fetch items separately
+  const { data: items } = await supabase
+    .from("quotation_items")
+    .select("*")
+    .eq("quotation_id", id)
+    .order("sort_order");
+
+  const result = {
+    ...(quotation as QuotationWithRelations),
+    quotation_items: (items as QuotationItem[]) ?? [],
+  };
+
+  return { data: result, error: null };
+}
+
+/**
+ * Create quotation with line items
+ */
+export async function createQuotation(
+  quotationData: Record<string, unknown>,
+  items: { description: string; unit: string; quantity: number; unit_price: number; total_price: number; sort_order: number }[]
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+    return { error: "Unauthorized." };
+  }
+
+  // Validate quotation data
+  const parsedQuotation = quotationDataSchema.safeParse(quotationData);
+  if (!parsedQuotation.success) {
+    return { error: parsedQuotation.error.issues[0]?.message ?? "Invalid quotation data." };
+  }
+
+  // Validate line items
+  const itemsSchema = z.array(quotationLineItemSchema).min(1, "At least one line item is required");
+  const parsedItems = itemsSchema.safeParse(items);
+  if (!parsedItems.success) {
+    return { error: parsedItems.error.issues[0]?.message ?? "Invalid line items." };
+  }
+
+  const supabase = await createClient();
+
+  // Generate quotation number using database sequence
+  const { data: seqData, error: seqError } = await supabase.rpc(
+    "next_sequence",
+    { seq_name: "quotation", prefix: "QT" }
+  );
+
+  const quotation_number = seqError
+    ? `QT-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
+    : (seqData as string);
+
+  const insertData = {
+    ...parsedQuotation.data,
+    quotation_number,
+    created_by: currentUser.id,
+  };
+
+  // Create quotation
+  const { data: quotation, error: qError } = await supabase
+    .from("quotations")
+    .insert(insertData)
+    .select("id")
+    .single();
+
+  if (qError) {
+    return { error: qError.message };
+  }
+
+  const quotationId = (quotation as { id: string }).id;
+
+  // Insert items
+  const itemsWithId = parsedItems.data.map((item) => ({
+    ...item,
+    quotation_id: quotationId,
+  }));
+
+  const { error: iError } = await supabase
+    .from("quotation_items")
+    .insert(itemsWithId);
+
+  if (iError) {
+    // Cleanup quotation on item insert failure
+    await supabase.from("quotations").delete().eq("id", quotationId);
+    return { error: iError.message };
+  }
+
+  revalidatePath("/quotations");
+  return { data: { id: quotationId, quotation_number }, error: null };
+}
+
+/**
+ * Update quotation and its items
+ */
+export async function updateQuotation(
+  id: string,
+  quotationData: Record<string, unknown>,
+  items: { description: string; unit: string; quantity: number; unit_price: number; total_price: number; sort_order: number }[]
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+    return { error: "Unauthorized." };
+  }
+
+  // Validate quotation data
+  const parsedQuotation = quotationDataSchema.safeParse(quotationData);
+  if (!parsedQuotation.success) {
+    return { error: parsedQuotation.error.issues[0]?.message ?? "Invalid quotation data." };
+  }
+
+  // Validate line items
+  const itemsSchema = z.array(quotationLineItemSchema).min(1, "At least one line item is required");
+  const parsedItems = itemsSchema.safeParse(items);
+  if (!parsedItems.success) {
+    return { error: parsedItems.error.issues[0]?.message ?? "Invalid line items." };
+  }
+
+  const supabase = await createClient();
+
+  // Update quotation
+  const { error: qError } = await supabase
+    .from("quotations")
+    .update({ ...parsedQuotation.data, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (qError) {
+    return { error: qError.message };
+  }
+
+  // Replace items: delete old, insert new
+  await supabase.from("quotation_items").delete().eq("quotation_id", id);
+
+  const itemsWithId = parsedItems.data.map((item) => ({
+    ...item,
+    quotation_id: id,
+  }));
+
+  const { error: iError } = await supabase
+    .from("quotation_items")
+    .insert(itemsWithId);
+
+  if (iError) {
+    return { error: iError.message };
+  }
+
+  revalidatePath("/quotations");
+  revalidatePath(`/quotations/${id}`);
+  return { error: null };
+}
+
+/**
+ * Update quotation status
+ */
+export async function updateQuotationStatus(
+  id: string,
+  status: string
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "Unauthorized." };
+
+  // Validate status
+  const parsed = quotationStatusSchema.safeParse({ status });
+  if (!parsed.success) {
+    return { error: "Invalid status value." };
+  }
+
+  // Only admin can approve
+  if (parsed.data.status === "approved" && currentUser.role !== "admin") {
+    return { error: "Only admins can approve quotations." };
+  }
+
+  const supabase = await createClient();
+
+  const updates: Record<string, unknown> = {
+    status: parsed.data.status,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (parsed.data.status === "approved") {
+    updates.approved_by = currentUser.id;
+  }
+
+  const { error } = await supabase
+    .from("quotations")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/quotations");
+  revalidatePath(`/quotations/${id}`);
+  return { error: null };
+}
+
+/**
+ * Get all customers for dropdown
+ */
+export async function getCustomersForDropdown(): Promise<{
+  data: { id: string; name: string; customer_id: string }[] | null;
+  error: string | null;
+}> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("customers")
+    .select("id, name, customer_id")
+    .eq("status", "active")
+    .order("name");
+
+  if (error) return { data: null, error: error.message };
+  return {
+    data: data as { id: string; name: string; customer_id: string }[],
+    error: null,
+  };
+}

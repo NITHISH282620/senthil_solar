@@ -1,0 +1,134 @@
+export const APP_NAME = "Sentil Solar Ops";
+export const APP_DESCRIPTION = "Field Operations Management System";
+
+export const ROLES = {
+  ADMIN: "admin",
+  MANAGER: "manager",
+  SUPERVISOR: "supervisor",
+  EMPLOYEE: "employee",
+} as const;
+
+export const EMPLOYEE_TYPES = [
+  { value: "daily_wage", label: "Daily Wage" },
+  { value: "monthly_salary", label: "Monthly Salary" },
+] as const;
+
+export const ATTENDANCE_STATUSES = [
+  { value: "present", label: "Present", color: "bg-emerald-500" },
+  { value: "absent", label: "Absent", color: "bg-red-500" },
+  { value: "half_day", label: "Half Day", color: "bg-amber-500" },
+  { value: "leave", label: "Leave", color: "bg-blue-500" },
+] as const;
+
+export const PROJECT_STATUSES = [
+  { value: "not_started", label: "Not Started", color: "bg-gray-500" },
+  { value: "in_progress", label: "In Progress", color: "bg-blue-500" },
+  { value: "completed", label: "Completed", color: "bg-emerald-500" },
+  { value: "billed", label: "Billed", color: "bg-purple-500" },
+  { value: "closed", label: "Closed", color: "bg-stone-500" },
+] as const;
+
+export const PROJECT_RATE_TYPES = [
+  { value: "per_unit", label: "Per Unit" },
+  { value: "per_day", label: "Per Day" },
+  { value: "lump_sum", label: "Lump Sum" },
+] as const;
+
+export const WORK_CATEGORIES = [
+  { value: "civil", label: "Civil Work" },
+  { value: "structure", label: "Structure Installation" },
+  { value: "panel_installation", label: "Panel Installation" },
+  { value: "electrical", label: "Electrical Work" },
+  { value: "testing", label: "Testing & Commissioning" },
+  { value: "other", label: "Other" },
+] as const;
+
+export const WEATHER_CONDITIONS = [
+  { value: "good", label: "Good/Clear" },
+  { value: "rainy", label: "Rainy" },
+  { value: "extreme_heat", label: "Extreme Heat" },
+] as const;
+
+export const EXPENSE_CATEGORIES = [
+  { value: "food", label: "Food", icon: "🍽️" },
+  { value: "tea", label: "Tea/Snacks", icon: "🍵" },
+  { value: "water", label: "Water", icon: "💧" },
+  { value: "fuel", label: "Fuel", icon: "⛽" },
+  { value: "travel", label: "Travel", icon: "🚌" },
+  { value: "vehicle", label: "Vehicle/Transport", icon: "🚗" },
+  { value: "equipment_rental", label: "Equipment Rental", icon: "🔧" },
+  { value: "labour", label: "Local Labour", icon: "👷" },
+  { value: "materials", label: "Materials", icon: "📦" },
+  { value: "miscellaneous", label: "Miscellaneous", icon: "📋" },
+] as const;
+
+export const MEAL_TYPES = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "tea", label: "Tea/Snacks" },
+  { value: "snacks", label: "Snacks" },
+] as const;
+
+export const EXPENSE_STATUSES = [
+  { value: "pending", label: "Pending Approval", color: "bg-amber-500" },
+  { value: "approved", label: "Approved", color: "bg-emerald-500" },
+  { value: "rejected", label: "Rejected", color: "bg-red-500" },
+] as const;
+
+export const ADVANCE_STATUSES = [
+  { value: "pending", label: "Pending Deduction", color: "bg-amber-500" },
+  { value: "partially_deducted", label: "Partially Deducted", color: "bg-blue-500" },
+  { value: "fully_deducted", label: "Fully Deducted", color: "bg-emerald-500" },
+] as const;
+
+export const INVOICE_STATUSES = [
+  { value: "draft", label: "Draft", color: "bg-gray-500" },
+  { value: "sent", label: "Sent", color: "bg-blue-500" },
+  { value: "partially_paid", label: "Partially Paid", color: "bg-amber-500" },
+  { value: "paid", label: "Paid", color: "bg-emerald-500" },
+  { value: "overdue", label: "Overdue", color: "bg-red-500" },
+] as const;
+
+export const PAYMENT_METHODS = [
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "bank_transfer", label: "Bank Transfer" },
+  { value: "cheque", label: "Cheque" },
+] as const;
+
+export const PROJECT_DOC_TYPES = [
+  { value: "work_order", label: "Client Work Order" },
+  { value: "drawing", label: "Drawing/Design" },
+  { value: "certificate", label: "Certificate" },
+  { value: "letter", label: "Letter" },
+  { value: "other", label: "Other" },
+] as const;
+
+// Pagination
+export const DEFAULT_PAGE_SIZE = 10;
+export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+// Export legacy constants for backward compatibility while migrating
+export const WORK_ORDER_TYPES = [
+  { value: "installation", label: "Installation" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "repair", label: "Repair" },
+  { value: "inspection", label: "Inspection" },
+] as const;
+
+export const WORK_ORDER_PRIORITIES = [
+  { value: "low", label: "Low", color: "bg-gray-500" },
+  { value: "medium", label: "Medium", color: "bg-blue-500" },
+  { value: "high", label: "High", color: "bg-amber-500" },
+  { value: "urgent", label: "Urgent", color: "bg-red-500" },
+] as const;
+
+export const WORK_ORDER_STATUSES = [
+  { value: "pending", label: "Pending", color: "bg-gray-500" },
+  { value: "scheduled", label: "Scheduled", color: "bg-blue-500" },
+  { value: "in_progress", label: "In Progress", color: "bg-amber-500" },
+  { value: "on_hold", label: "On Hold", color: "bg-orange-500" },
+  { value: "completed", label: "Completed", color: "bg-emerald-500" },
+  { value: "cancelled", label: "Cancelled", color: "bg-red-500" },
+] as const;
