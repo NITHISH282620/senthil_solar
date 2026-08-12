@@ -18,7 +18,8 @@ export function PrintAction() {
     <div className="print:hidden fixed top-4 right-4 z-50 bg-white/80 backdrop-blur-sm p-4 rounded-xl shadow-lg border">
       <div className="flex flex-col items-center gap-2 text-center">
         <p className="text-sm font-medium text-muted-foreground mb-2 max-w-[200px]">
-          Use your browser's "Save as PDF" option for the best result.
+          Use your browser&apos;s &ldquo;Save as PDF&rdquo; option for the best
+          result.
         </p>
         <Button onClick={() => window.print()} className="w-full">
           <Printer className="mr-2 h-4 w-4" />

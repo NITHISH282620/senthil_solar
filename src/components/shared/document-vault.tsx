@@ -29,7 +29,7 @@ import { uploadDocument, deleteDocument, getSignedUrl, type DocumentWithUploader
 import { formatDate } from "@/lib/format";
 
 interface DocumentVaultProps {
-  entityType: "employee" | "customer" | "work_order" | "quotation" | "invoice" | "expense" | "general";
+  entityType: "employee" | "customer" | "project" | "quotation" | "invoice" | "expense" | "general";
   entityId?: string;
   initialDocuments?: DocumentWithUploader[];
 }
@@ -50,10 +50,15 @@ export function DocumentVault({ entityType, entityId, initialDocuments = [] }: D
   const [previewDoc, setPreviewDoc] = useState<DocumentWithUploader | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
-  // Update local state when props change
-  useEffect(() => {
+  // `documents` is local so deletes can be optimistic. When the server sends a
+  // fresh list we adopt it during render rather than in an effect — an effect
+  // would render the stale list first, then immediately re-render.
+  // https://react.dev/learn/you-might-not-need-an-effect
+  const [syncedFrom, setSyncedFrom] = useState(initialDocuments);
+  if (syncedFrom !== initialDocuments) {
+    setSyncedFrom(initialDocuments);
     setDocuments(initialDocuments);
-  }, [initialDocuments]);
+  }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();

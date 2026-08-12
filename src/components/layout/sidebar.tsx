@@ -11,8 +11,8 @@ import {
   Briefcase,
   IndianRupee,
   Receipt,
-  FolderOpen,
-  BarChart3,
+  Building2,
+  FileText,
   Settings,
   Sun,
   LogOut,
@@ -44,6 +44,18 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  {
+    title: "Clients",
+    href: "/customers",
+    icon: Building2,
+    roles: ["admin", "manager"],
+  },
+  {
+    title: "Quotations",
+    href: "/quotations",
+    icon: FileText,
+    roles: ["admin", "manager"],
+  },
   { title: "Projects", href: "/projects", icon: Briefcase },
   { title: "Attendance", href: "/attendance", icon: CalendarCheck },
   { title: "Expenses", href: "/expenses", icon: Receipt },
@@ -53,17 +65,10 @@ const navItems: NavItem[] = [
     icon: IndianRupee,
     roles: ["admin", "manager"],
   },
-  { title: "Documents", href: "/documents", icon: FolderOpen },
   {
     title: "Employees",
     href: "/employees",
     icon: Users,
-    roles: ["admin", "manager"],
-  },
-  {
-    title: "Reports",
-    href: "/reports",
-    icon: BarChart3,
     roles: ["admin", "manager"],
   },
 ];

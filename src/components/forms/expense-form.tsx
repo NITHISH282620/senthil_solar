@@ -26,14 +26,14 @@ interface ExpenseItemInput {
 }
 
 interface ExpenseFormProps {
-  workOrders?: { id: string; work_order_number: string; title: string }[];
+  projects?: { id: string; project_code: string; name: string }[];
 }
 
-export function ExpenseForm({ workOrders = [] }: ExpenseFormProps) {
+export function ExpenseForm({ projects = [] }: ExpenseFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("materials");
-  const [workOrderId, setWorkOrderId] = useState("");
+  const [projectId, setProjectId] = useState("");
   
   const [items, setItems] = useState<ExpenseItemInput[]>([
     { id: crypto.randomUUID(), description: "", amount: 0 },
@@ -73,21 +73,21 @@ export function ExpenseForm({ workOrders = [] }: ExpenseFormProps) {
 
     try {
       formData.set("category", category);
-      if (workOrderId && workOrderId !== "none") {
-        formData.set("work_order_id", workOrderId);
+      if (projectId && projectId !== "none") {
+        formData.set("project_id", projectId);
       }
       formData.set("items", JSON.stringify(validItems));
 
       const result = await createExpense(formData);
 
-      if (result?.error) {
-        toast.error(result.error);
+      if (result.error || !result.data) {
+        toast.error(result.error ?? "Could not submit expense.");
       } else {
         toast.success("Expense submitted successfully");
-        router.push(`/expenses/${(result as any).data.id}`);
+        router.push(`/expenses/${result.data.id}`);
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -129,16 +129,16 @@ export function ExpenseForm({ workOrders = [] }: ExpenseFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="workOrder">Link to Work Order (Optional)</Label>
-              <Select value={workOrderId} onValueChange={(v) => setWorkOrderId(v || "")}>
+              <Label htmlFor="project">Link to Project (Optional)</Label>
+              <Select value={projectId} onValueChange={(v) => setProjectId(v || "")}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select work order" />
+                  <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {workOrders.map((wo) => (
-                    <SelectItem key={wo.id} value={wo.id}>
-                      {wo.work_order_number} - {wo.title}
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.project_code} - {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

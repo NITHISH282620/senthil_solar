@@ -103,20 +103,20 @@ export async function createQuotation(
 ) {
   const currentUser = await getCurrentUser();
   if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
-    return { error: "Unauthorized." };
+    return { data: null, error: "Unauthorized." };
   }
 
   // Validate quotation data
   const parsedQuotation = quotationDataSchema.safeParse(quotationData);
   if (!parsedQuotation.success) {
-    return { error: parsedQuotation.error.issues[0]?.message ?? "Invalid quotation data." };
+    return { data: null, error: parsedQuotation.error.issues[0]?.message ?? "Invalid quotation data." };
   }
 
   // Validate line items
   const itemsSchema = z.array(quotationLineItemSchema).min(1, "At least one line item is required");
   const parsedItems = itemsSchema.safeParse(items);
   if (!parsedItems.success) {
-    return { error: parsedItems.error.issues[0]?.message ?? "Invalid line items." };
+    return { data: null, error: parsedItems.error.issues[0]?.message ?? "Invalid line items." };
   }
 
   const supabase = await createClient();
@@ -145,7 +145,7 @@ export async function createQuotation(
     .single();
 
   if (qError) {
-    return { error: qError.message };
+    return { data: null, error: qError.message };
   }
 
   const quotationId = (quotation as { id: string }).id;
@@ -163,7 +163,7 @@ export async function createQuotation(
   if (iError) {
     // Cleanup quotation on item insert failure
     await supabase.from("quotations").delete().eq("id", quotationId);
-    return { error: iError.message };
+    return { data: null, error: iError.message };
   }
 
   revalidatePath("/quotations");

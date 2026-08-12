@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createProject, updateProject } from "@/actions/projects";
-import type { Project } from "@/types/database";
+import type { Project, ProjectStatus, ProjectRateType } from "@/types/database";
 import { PROJECT_STATUSES, PROJECT_RATE_TYPES } from "@/lib/constants";
 
 interface ProjectFormProps {
@@ -37,24 +37,25 @@ export function ProjectForm({ initialData }: ProjectFormProps) {
       formData.set("status", status);
       formData.set("rate_type", rateType);
 
-      const result = initialData
-        ? await updateProject(initialData.id, formData)
-        : await createProject(formData);
-
-      if (result?.error) {
-        toast.error(result.error);
+      if (initialData) {
+        const result = await updateProject(initialData.id, formData);
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Project updated");
+        router.push(`/projects/${initialData.id}`);
       } else {
-        toast.success(
-          initialData ? "Project updated" : "Project created"
-        );
-        router.push(
-          initialData
-            ? `/projects/${initialData.id}`
-            : `/projects/${(result as any).data.id}`
-        );
-        router.refresh();
+        const result = await createProject(formData);
+        if (result.error || !result.data) {
+          toast.error(result.error ?? "Could not create project.");
+          return;
+        }
+        toast.success("Project created");
+        router.push(`/projects/${result.data.id}`);
       }
-    } catch (err) {
+      router.refresh();
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -82,7 +83,7 @@ export function ProjectForm({ initialData }: ProjectFormProps) {
 
             <div className="space-y-2">
               <Label htmlFor="status">Status *</Label>
-              <Select value={status} onValueChange={(v: any) => setStatus(v)}>
+              <Select value={status} onValueChange={(v) => setStatus(v as ProjectStatus)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -276,7 +277,7 @@ export function ProjectForm({ initialData }: ProjectFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="rate_type">Rate Type</Label>
-              <Select value={rateType} onValueChange={(v: any) => setRateType(v)}>
+              <Select value={rateType} onValueChange={(v) => setRateType(v as ProjectRateType)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

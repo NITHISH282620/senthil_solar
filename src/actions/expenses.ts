@@ -12,12 +12,12 @@ import type {
   Expense,
   ExpenseItem,
   Profile,
-  WorkOrder,
+  Project,
 } from "@/types/database";
 
 export interface ExpenseWithRelations extends Expense {
   employee?: Pick<Profile, "id" | "full_name" | "employee_id"> | null;
-  work_order?: Pick<WorkOrder, "id" | "work_order_number" | "title"> | null;
+  project?: Pick<Project, "id" | "project_code" | "name"> | null;
   items?: ExpenseItem[];
 }
 
@@ -38,8 +38,7 @@ export async function getExpenses(params?: {
     .from("expenses")
     .select(`
       *,
-      employee:profiles!expenses_employee_id_fkey(id, full_name, employee_id),
-      work_order:work_orders!expenses_work_order_id_fkey(id, work_order_number, title)
+      employee:profiles!expenses_employee_id_fkey(id, full_name, employee_id)
     `)
     .order("created_at", { ascending: false });
 
@@ -77,7 +76,7 @@ export async function getExpense(
     .select(`
       *,
       employee:profiles!expenses_employee_id_fkey(id, full_name, employee_id),
-      work_order:work_orders!expenses_work_order_id_fkey(id, work_order_number, title),
+      project:projects!expenses_project_id_fkey(id, project_code, name),
       items:expense_items(*)
     `)
     .eq("id", id)
@@ -96,12 +95,12 @@ export async function getExpense(
 export async function createExpense(formData: FormData) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
-    return { error: "Unauthorized" };
+    return { data: null, error: "Unauthorized" };
   }
 
   const parsed = parseFormData(expenseSchema, formData);
   if (!parsed.success) {
-    return { error: parsed.error };
+    return { data: null, error: parsed.error };
   }
 
   const supabase = await createClient();
@@ -126,7 +125,7 @@ export async function createExpense(formData: FormData) {
     title: parsed.data.title,
     description: parsed.data.description,
     total_amount,
-    work_order_id: parsed.data.work_order_id,
+    project_id: parsed.data.project_id,
   };
 
   const { data, error } = await supabase
@@ -135,7 +134,7 @@ export async function createExpense(formData: FormData) {
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { data: null, error: error.message };
 
   const expenseId = (data as { id: string }).id;
 
@@ -151,7 +150,7 @@ export async function createExpense(formData: FormData) {
     .from("expense_items")
     .insert(itemsToInsert);
 
-  if (itemsError) return { error: itemsError.message };
+  if (itemsError) return { data: null, error: itemsError.message };
 
   revalidatePath("/expenses");
   return { data: { id: expenseId, expense_number }, error: null };
@@ -165,9 +164,9 @@ export async function updateExpenseStatus(id: string, status: string) {
 
   const supabase = await createClient();
 
-  const updates: any = { 
-    status, 
-    updated_at: new Date().toISOString() 
+  const updates: Record<string, unknown> = {
+    status,
+    updated_at: new Date().toISOString(),
   };
 
   if (status === "approved" || status === "rejected") {

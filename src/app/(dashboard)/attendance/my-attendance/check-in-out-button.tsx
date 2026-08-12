@@ -5,9 +5,10 @@ import { LogIn, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { checkIn, checkOut } from "@/actions/attendance";
+import type { Attendance } from "@/types/database";
 
 interface CheckInOutButtonProps {
-  todayRecord: any; // Type from DB
+  todayRecord: Pick<Attendance, "check_in" | "check_out"> | null;
 }
 
 export function CheckInOutButton({ todayRecord }: CheckInOutButtonProps) {

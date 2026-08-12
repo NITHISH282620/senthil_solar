@@ -15,15 +15,15 @@ import type {
   InvoiceItem,
   Payment,
   Customer,
-  WorkOrder,
+  Project,
   Quotation,
   Profile,
 } from "@/types/database";
 
 export interface InvoiceWithRelations extends Invoice {
   customer?: Pick<Customer, "id" | "name" | "customer_id" | "email" | "phone" | "address" | "city"> | null;
-  work_order?: Pick<WorkOrder, "id" | "work_order_number" | "title"> | null;
   quotation?: Pick<Quotation, "id" | "quotation_number" | "title"> | null;
+  project?: Pick<Project, "id" | "project_code" | "name"> | null;
   items?: InvoiceItem[];
   payments?: (Payment & { received_by_profile?: Pick<Profile, "full_name"> | null })[];
 }
@@ -82,7 +82,7 @@ export async function getInvoice(
     .select(`
       *,
       customer:customers!invoices_customer_id_fkey(id, name, customer_id, email, phone, address, city),
-      work_order:work_orders!invoices_work_order_id_fkey(id, work_order_number, title),
+      project:projects!invoices_project_id_fkey(id, project_code, name),
       quotation:quotations!invoices_quotation_id_fkey(id, quotation_number, title),
       items:invoice_items(*),
       payments(
@@ -111,12 +111,12 @@ export async function getInvoice(
 export async function createInvoice(formData: FormData) {
   const currentUser = await getCurrentUser();
   if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
-    return { error: "Unauthorized. Only admins and managers can create invoices." };
+    return { data: null, error: "Unauthorized. Only admins and managers can create invoices." };
   }
 
   const parsed = parseFormData(invoiceSchema, formData);
   if (!parsed.success) {
-    return { error: parsed.error };
+    return { data: null, error: parsed.error };
   }
 
   const supabase = await createClient();
@@ -143,7 +143,7 @@ export async function createInvoice(formData: FormData) {
   const insertData = {
     invoice_number,
     customer_id: parsed.data.customer_id,
-    work_order_id: parsed.data.work_order_id,
+    project_id: parsed.data.project_id,
     quotation_id: parsed.data.quotation_id,
     subtotal,
     tax_percent: parsed.data.tax_percent,
@@ -161,7 +161,7 @@ export async function createInvoice(formData: FormData) {
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { data: null, error: error.message };
 
   const invoiceId = (data as { id: string }).id;
 
@@ -180,7 +180,7 @@ export async function createInvoice(formData: FormData) {
     .from("invoice_items")
     .insert(itemsToInsert);
 
-  if (itemsError) return { error: itemsError.message };
+  if (itemsError) return { data: null, error: itemsError.message };
 
   revalidatePath("/billing");
   return { data: { id: invoiceId, invoice_number }, error: null };

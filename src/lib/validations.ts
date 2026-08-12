@@ -1,16 +1,57 @@
 import { z } from "zod";
 
-// ─── Shared ──────────────────────────────────────────────
+// ─── Shared primitives ───────────────────────────────────
+//
+// IMPORTANT: `parseFormData` below converts every FormData entry to a string.
+// Zod's `z.number()` / `z.boolean()` do NOT coerce, so any schema field that
+// arrives via FormData must use `z.coerce.*`. Using the plain variants here was
+// silently breaking every create/update form in the application.
+
+/** Optional numeric field: "" / undefined → null, otherwise coerced number. */
+const optionalNumber = (min?: number, max?: number) =>
+  z
+    .union([z.literal(""), z.coerce.number()])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : (v as number)))
+    .refine((v) => v === null || min === undefined || v >= min, {
+      message: min === 0 ? "Cannot be negative" : `Must be at least ${min}`,
+    })
+    .refine((v) => v === null || max === undefined || v <= max, {
+      message: `Must be at most ${max}`,
+    });
+
+/** Optional text field: "" / undefined → null. */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .max(max, `Must be ${max} characters or fewer`)
+    .optional()
+    .transform((v) => (v ? v : null));
+
+/** Optional date (ISO yyyy-mm-dd) field: "" / undefined → null. */
+const optionalDate = () =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v ? v : null));
 
 /**
- * Sanitize search input to prevent PostgREST filter injection.
- * Strips characters that have special meaning in PostgREST filter syntax.
+ * Checkbox / switch values arrive as "on", "true", "1" or are absent entirely.
+ */
+const checkbox = () =>
+  z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) => v === true || v === "true" || v === "on" || v === "1");
+
+/**
+ * Sanitize search input before it reaches a PostgREST `.or()` / `.ilike()`
+ * filter. PostgREST treats `.`, `,`, `(`, `)` as filter syntax and `%`, `_`,
+ * `*` as LIKE wildcards — all must be neutralised.
  */
 export function sanitizeSearchInput(input: string): string {
-  return input.replace(/[.,()!]/g, "").trim();
+  return input.replace(/[.,()!*%_\\:]/g, "").trim().slice(0, 100);
 }
-
-const uuidSchema = z.string().uuid("Invalid ID format");
 
 const phoneSchema = z
   .string()
@@ -42,188 +83,346 @@ export const forgotPasswordSchema = z.object({
 export const createEmployeeSchema = z.object({
   full_name: z.string().min(1, "Name is required").max(200),
   email: z.string().email("Valid email is required"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   phone: phoneSchema,
-  role: z.enum(["admin", "manager", "supervisor", "employee"]).default("employee"),
-  department: z.string().max(100).optional().transform((v) => v || null),
-  designation: z.string().max(100).optional().transform((v) => v || null),
+  role: z
+    .enum(["admin", "manager", "supervisor", "employee"])
+    .default("employee"),
+  department: optionalText(100),
+  designation: optionalText(100),
   employee_type: z.enum(["daily_wage", "monthly_salary"]).default("daily_wage"),
-  daily_rate: z.number().min(0).optional().transform((v) => v ?? null),
-  monthly_salary: z.number().min(0).optional().transform((v) => v ?? null),
-  ot_rate_per_hour: z.number().min(0).optional().transform((v) => v ?? null),
-  date_of_joining: z.string().optional().transform((v) => v || null),
-  address: z.string().max(500).optional().transform((v) => v || null),
-  emergency_contact_name: z.string().max(200).optional().transform((v) => v || null),
+  daily_rate: optionalNumber(0),
+  monthly_salary: optionalNumber(0),
+  ot_rate_per_hour: optionalNumber(0),
+  date_of_joining: optionalDate(),
+  address: optionalText(500),
+  emergency_contact_name: optionalText(200),
   emergency_contact_phone: phoneSchema,
-  manager_id: z.string().uuid().optional().transform((v) => v || null),
-  bank_account_no: z.string().max(50).optional().transform((v) => v || null),
-  bank_ifsc: z.string().max(20).optional().transform((v) => v || null),
-  bank_name: z.string().max(100).optional().transform((v) => v || null),
-  aadhar_number: z.string().max(20).optional().transform((v) => v || null),
+  manager_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  bank_account_no: optionalText(50),
+  bank_ifsc: optionalText(20),
+  bank_name: optionalText(100),
+  aadhar_number: optionalText(20),
 });
 
 export const updateEmployeeSchema = z.object({
   full_name: z.string().min(1, "Name is required").max(200),
   phone: phoneSchema,
-  department: z.string().max(100).optional().transform((v) => v || null),
-  designation: z.string().max(100).optional().transform((v) => v || null),
+  department: optionalText(100),
+  designation: optionalText(100),
   employee_type: z.enum(["daily_wage", "monthly_salary"]).optional(),
-  daily_rate: z.number().min(0).optional().transform((v) => v ?? null),
-  monthly_salary: z.number().min(0).optional().transform((v) => v ?? null),
-  ot_rate_per_hour: z.number().min(0).optional().transform((v) => v ?? null),
-  address: z.string().max(500).optional().transform((v) => v || null),
-  emergency_contact_name: z.string().max(200).optional().transform((v) => v || null),
+  daily_rate: optionalNumber(0),
+  monthly_salary: optionalNumber(0),
+  ot_rate_per_hour: optionalNumber(0),
+  address: optionalText(500),
+  emergency_contact_name: optionalText(200),
   emergency_contact_phone: phoneSchema,
   // Admin-only fields
   role: z.enum(["admin", "manager", "supervisor", "employee"]).optional(),
-  date_of_joining: z.string().optional().transform((v) => v || null),
-  manager_id: z.string().uuid().optional().transform((v) => v || null),
-  is_active: z.string().optional().transform((v) => v === "true"),
-  bank_account_no: z.string().max(50).optional().transform((v) => v || null),
-  bank_ifsc: z.string().max(20).optional().transform((v) => v || null),
-  bank_name: z.string().max(100).optional().transform((v) => v || null),
-  aadhar_number: z.string().max(20).optional().transform((v) => v || null),
+  date_of_joining: optionalDate(),
+  manager_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  is_active: checkbox(),
+  bank_account_no: optionalText(50),
+  bank_ifsc: optionalText(20),
+  bank_name: optionalText(100),
+  aadhar_number: optionalText(20),
 });
 
-// ─── Projects ────────────────────────────────────────────
+// ─── Customers (client companies — becomes `companies` in Phase 1) ──
+
+export const createCustomerSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200),
+  email: emailSchema,
+  phone: z.string().regex(/^\d{10,12}$/, "Phone must be 10-12 digits"),
+  alternate_phone: phoneSchema,
+  address: z.string().min(1, "Address is required").max(500),
+  city: optionalText(100),
+  state: optionalText(100),
+  pincode: optionalText(10),
+  gst_number: optionalText(20),
+  source: z
+    .enum(["referral", "website", "walk_in", "social_media", "other"])
+    .optional()
+    .transform((v) => v || null),
+  assigned_to: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  status: z.enum(["active", "inactive", "prospect"]).default("active"),
+  notes: optionalText(2000),
+});
+
+export const updateCustomerSchema = createCustomerSchema;
+
+// ─── Projects (becomes `contracts` in Phase 1) ───────────
 
 export const createProjectSchema = z.object({
   name: z.string().min(1, "Project name is required").max(300),
   client_company: z.string().min(1, "Client company is required").max(200),
-  client_contact_name: z.string().max(200).optional().transform((v) => v || null),
+  client_contact_name: optionalText(200),
   client_contact_phone: phoneSchema,
-  client_gst: z.string().max(20).optional().transform((v) => v || null),
-  district: z.string().max(100).optional().transform((v) => v || null),
-  site_address: z.string().max(500).optional().transform((v) => v || null),
-  site_gps_lat: z.number().optional().transform((v) => v ?? null),
-  site_gps_lng: z.number().optional().transform((v) => v ?? null),
-  geofence_radius_m: z.number().min(10).default(500),
-  scope_description: z.string().max(2000).optional().transform((v) => v || null),
-  rate_type: z.enum(["per_unit", "per_day", "lump_sum"]).optional().transform((v) => v || null),
-  rate_amount: z.number().min(0).optional().transform((v) => v ?? null),
-  rate_unit: z.string().max(50).optional().transform((v) => v || null),
-  start_date: z.string().optional().transform((v) => v || null),
-  expected_end_date: z.string().optional().transform((v) => v || null),
-  total_workers_required: z.number().int().min(1).optional().transform((v) => v ?? null),
-  notes: z.string().max(2000).optional().transform((v) => v || null),
-  status: z.enum(["not_started", "in_progress", "completed", "billed", "closed"]).default("not_started"),
+  client_gst: optionalText(20),
+  district: optionalText(100),
+  site_address: optionalText(500),
+  site_gps_lat: optionalNumber(-90, 90),
+  site_gps_lng: optionalNumber(-180, 180),
+  geofence_radius_m: z.coerce.number().min(10).default(500),
+  scope_description: optionalText(2000),
+  rate_type: z
+    .enum(["per_unit", "per_day", "lump_sum"])
+    .optional()
+    .transform((v) => v || null),
+  rate_amount: optionalNumber(0),
+  rate_unit: optionalText(50),
+  start_date: optionalDate(),
+  expected_end_date: optionalDate(),
+  total_workers_required: optionalNumber(1),
+  notes: optionalText(2000),
+  status: z
+    .enum(["not_started", "in_progress", "completed", "billed", "closed"])
+    .default("not_started"),
 });
 
 export const updateProjectSchema = createProjectSchema.extend({
-  progress_percent: z.number().min(0).max(100).optional(),
-  actual_end_date: z.string().optional().transform((v) => v || null),
+  progress_percent: optionalNumber(0, 100),
+  actual_end_date: optionalDate(),
 });
 
 export const projectAssignmentSchema = z.object({
   project_id: z.string().uuid("Project is required"),
   employee_id: z.string().uuid("Employee is required"),
   role_in_project: z.enum(["supervisor", "worker"]).default("worker"),
-  assigned_date: z.string().optional().transform((v) => v || null),
+  assigned_date: optionalDate(),
 });
 
 // ─── Attendance ──────────────────────────────────────────
 
 export const attendanceSchema = z.object({
   employee_id: z.string().uuid("Employee is required"),
-  project_id: z.string().uuid().optional().transform((v) => v || null),
+  project_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
   date: z.string().min(1, "Date is required"),
-  status: z.enum(["present", "absent", "half_day", "leave"]),
-  check_in_gps_lat: z.number().optional().transform((v) => v ?? null),
-  check_in_gps_lng: z.number().optional().transform((v) => v ?? null),
-  check_in_photo_url: z.string().url().optional().transform((v) => v || null),
-  check_out_gps_lat: z.number().optional().transform((v) => v ?? null),
-  check_out_gps_lng: z.number().optional().transform((v) => v ?? null),
-  notes: z.string().max(2000).optional().transform((v) => v || null),
-  is_offline_entry: z.boolean().default(false),
+  status: z.enum(["present", "absent", "half_day", "leave", "holiday"]),
+  check_in_gps_lat: optionalNumber(-90, 90),
+  check_in_gps_lng: optionalNumber(-180, 180),
+  check_in_photo_url: optionalText(500),
+  check_out_gps_lat: optionalNumber(-90, 90),
+  check_out_gps_lng: optionalNumber(-180, 180),
+  notes: optionalText(2000),
+  is_offline_entry: checkbox(),
 });
 
 export const batchAttendanceSchema = z.object({
-  project_id: z.string().uuid("Project is required"),
+  project_id: z.string().uuid("Site is required"),
   date: z.string().min(1, "Date is required"),
-  records: z.array(z.object({
-    employee_id: z.string().uuid(),
-    status: z.enum(["present", "absent", "half_day", "leave"]),
-  })).min(1, "At least one record is required"),
+  records: z
+    .array(
+      z.object({
+        employee_id: z.string().uuid(),
+        status: z.enum(["present", "absent", "half_day", "leave", "holiday"]),
+        overtime_hours: z.coerce.number().min(0).max(24).default(0),
+      })
+    )
+    .min(1, "At least one record is required"),
 });
 
 export const attendanceCorrectionSchema = z.object({
   employee_id: z.string().uuid(),
-  project_id: z.string().uuid().optional().transform((v) => v || null),
+  project_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
   date: z.string().min(1),
-  status: z.enum(["present", "absent", "half_day", "leave"]),
-  working_hours: z.number().min(0).optional().transform((v) => v ?? null),
-  overtime_hours: z.number().min(0).optional().transform((v) => v ?? null),
+  status: z.enum(["present", "absent", "half_day", "leave", "holiday"]),
+  working_hours: optionalNumber(0, 24),
+  overtime_hours: optionalNumber(0, 24),
   correction_reason: z.string().min(1, "Reason is required").max(1000),
 });
 
-// ─── Work Logs ───────────────────────────────────────────
+// ─── Leave requests ──────────────────────────────────────
+
+export const leaveRequestSchema = z
+  .object({
+    leave_type: z.enum(["sick", "casual", "annual", "unpaid", "other"]),
+    from_date: z.string().min(1, "From date is required"),
+    to_date: z.string().min(1, "To date is required"),
+    reason: z.string().min(1, "Reason is required").max(1000),
+  })
+  .refine((v) => v.to_date >= v.from_date, {
+    message: "To date must be on or after the from date",
+    path: ["to_date"],
+  });
+
+export const leaveStatusSchema = z.object({
+  status: z.enum(["approved", "rejected"]),
+});
+
+// ─── Work logs ───────────────────────────────────────────
 
 export const workLogSchema = z.object({
-  project_id: z.string().uuid("Project is required"),
+  project_id: z.string().uuid("Site is required"),
   date: z.string().min(1, "Date is required"),
-  work_description: z.string().min(1, "Work description is required").max(5000),
-  work_category: z.enum(["civil", "structure", "panel_installation", "electrical", "testing", "other"]).default("other"),
-  workers_present_count: z.number().int().min(0).optional().transform((v) => v ?? null),
-  materials_used: z.string().max(2000).optional().transform((v) => v || null),
-  problems: z.string().max(2000).optional().transform((v) => v || null),
-  weather: z.enum(["good", "rainy", "extreme_heat"]).optional().transform((v) => v || null),
-  remarks: z.string().max(2000).optional().transform((v) => v || null),
+  work_description: z
+    .string()
+    .min(1, "Work description is required")
+    .max(5000),
+  work_category: z
+    .enum([
+      "civil",
+      "structure",
+      "panel_installation",
+      "electrical",
+      "testing",
+      "other",
+    ])
+    .default("other"),
+  workers_present_count: optionalNumber(0),
+  materials_used: optionalText(2000),
+  problems: optionalText(2000),
+  weather: z
+    .enum(["good", "rainy", "extreme_heat"])
+    .optional()
+    .transform((v) => v || null),
+  remarks: optionalText(2000),
 });
 
 export const workLogPhotoSchema = z.object({
   work_log_id: z.string().uuid("Work log is required"),
-  photo_url: z.string().url("Valid photo URL is required"),
-  caption: z.string().max(500).optional().transform((v) => v || null),
-  gps_lat: z.number().optional().transform((v) => v ?? null),
-  gps_lng: z.number().optional().transform((v) => v ?? null),
-  taken_at: z.string().optional().transform((v) => v || new Date().toISOString()),
+  photo_url: z.string().min(1, "Photo is required"),
+  caption: optionalText(500),
+  gps_lat: optionalNumber(-90, 90),
+  gps_lng: optionalNumber(-180, 180),
+  taken_at: z
+    .string()
+    .optional()
+    .transform((v) => v || new Date().toISOString()),
 });
 
 // ─── Expenses ────────────────────────────────────────────
 
+export const expenseItemSchema = z.object({
+  description: z.string().min(1, "Description is required").max(500),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
+});
+
 export const expenseSchema = z.object({
-  project_id: z.string().uuid("Project is required"),
-  date: z.string().min(1, "Date is required"),
-  category: z.enum(["food", "tea", "water", "fuel", "travel", "vehicle", "equipment_rental", "labour", "materials", "miscellaneous"]),
+  project_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  date: z
+    .string()
+    .optional()
+    .transform((v) => v || new Date().toISOString().slice(0, 10)),
+  category: z.enum([
+    "food",
+    "tea",
+    "water",
+    "fuel",
+    "travel",
+    "vehicle",
+    "equipment_rental",
+    "labour",
+    "materials",
+    "miscellaneous",
+  ]),
   title: z.string().min(1, "Title is required").max(300),
-  description: z.string().max(2000).optional().transform((v) => v || null),
-  total_amount: z.number().positive("Amount must be greater than 0"),
-  head_count: z.number().int().min(1).optional().transform((v) => v ?? null),
-  meal_type: z.enum(["breakfast", "lunch", "dinner", "tea", "snacks"]).optional().transform((v) => v || null),
-  receipt_url: z.string().url().optional().transform((v) => v || null),
+  description: optionalText(2000),
+  head_count: optionalNumber(1),
+  meal_type: z
+    .enum(["breakfast", "lunch", "dinner", "tea", "snacks"])
+    .optional()
+    .transform((v) => v || null),
+  receipt_url: optionalText(500),
+  items: jsonArray(expenseItemSchema, "expense items"),
 });
 
 export const expenseApprovalSchema = z.object({
   status: z.enum(["approved", "rejected"]),
-  rejection_reason: z.string().max(1000).optional().transform((v) => v || null),
+  rejection_reason: optionalText(1000),
 });
 
-// ─── Salary Advances ─────────────────────────────────────
+// ─── Salary advances ─────────────────────────────────────
 
 export const salaryAdvanceSchema = z.object({
   employee_id: z.string().uuid("Employee is required"),
-  project_id: z.string().uuid().optional().transform((v) => v || null),
-  amount: z.number().positive("Amount must be greater than 0"),
+  project_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
   date: z.string().min(1, "Date is required"),
-  reason: z.string().max(1000).optional().transform((v) => v || null),
+  reason: optionalText(1000),
 });
 
 // ─── Payroll ─────────────────────────────────────────────
 
 export const generatePayrollSchema = z.object({
-  month: z.number().int().min(1).max(12),
-  year: z.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
 });
 
 export const updatePayrollSchema = z.object({
-  other_deductions: z.number().min(0).optional(),
-  deduction_notes: z.string().max(1000).optional().transform((v) => v || null),
-  bonus: z.number().min(0).optional(),
-  bonus_notes: z.string().max(1000).optional().transform((v) => v || null),
-  is_paid: z.boolean().optional(),
-  paid_date: z.string().optional().transform((v) => v || null),
-  paid_method: z.enum(["bank_transfer", "cash", "upi", "cheque"]).optional().transform((v) => v || null),
-  paid_reference: z.string().max(100).optional().transform((v) => v || null),
+  other_deductions: optionalNumber(0),
+  deduction_notes: optionalText(1000),
+  bonus: optionalNumber(0),
+  bonus_notes: optionalText(1000),
+  is_paid: checkbox(),
+  paid_date: optionalDate(),
+  paid_method: z
+    .enum(["bank_transfer", "cash", "upi", "cheque"])
+    .optional()
+    .transform((v) => v || null),
+  paid_reference: optionalText(100),
+});
+
+// ─── Quotations ──────────────────────────────────────────
+
+export const quotationLineItemSchema = z.object({
+  description: z.string().min(1, "Description is required").max(500),
+  unit: z.string().min(1).max(50).default("nos"),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0"),
+  unit_price: z.coerce.number().min(0, "Price cannot be negative"),
+  total_price: z.coerce.number().min(0),
+  sort_order: z.coerce.number().int().min(0).default(0),
+});
+
+export const quotationDataSchema = z.object({
+  customer_id: z.string().uuid("Customer is required"),
+  title: z.string().min(1, "Title is required").max(300),
+  description: optionalText(2000),
+  system_capacity_kw: optionalNumber(0),
+  panel_type: optionalText(100),
+  inverter_type: optionalText(100),
+  subtotal: z.coerce.number().min(0),
+  tax_percent: z.coerce.number().min(0).max(100).default(18),
+  tax_amount: z.coerce.number().min(0).default(0),
+  discount_amount: z.coerce.number().min(0).default(0),
+  total_amount: z.coerce.number().min(0),
+  valid_until: optionalDate(),
+  notes: optionalText(2000),
+  status: z
+    .enum(["draft", "sent", "approved", "rejected", "expired", "converted"])
+    .default("draft"),
+});
+
+export const quotationStatusSchema = z.object({
+  status: z.enum([
+    "draft",
+    "sent",
+    "approved",
+    "rejected",
+    "expired",
+    "converted",
+  ]),
 });
 
 // ─── Invoices ────────────────────────────────────────────
@@ -231,58 +430,56 @@ export const updatePayrollSchema = z.object({
 export const invoiceItemSchema = z.object({
   description: z.string().min(1, "Description is required").max(500),
   unit: z.string().min(1, "Unit is required").max(50).default("nos"),
-  quantity: z.number().positive(),
-  unit_price: z.number().min(0),
+  quantity: z.coerce.number().positive(),
+  unit_price: z.coerce.number().min(0),
 });
 
 export const invoiceSchema = z.object({
-  project_id: z.string().uuid("Project is required"),
-  billing_period_start: z.string().optional().transform((v) => v || null),
-  billing_period_end: z.string().optional().transform((v) => v || null),
-  due_date: z.string().optional().transform((v) => v || null),
-  tax_percent: z.number().min(0).max(100).default(18),
-  discount_amount: z.number().min(0).default(0),
-  tds_deducted: z.number().min(0).default(0),
-  notes: z.string().max(2000).optional().transform((v) => v || null),
-  items: z.string().transform((str, ctx) => {
-    try {
-      const parsed = JSON.parse(str);
-      const result = z.array(invoiceItemSchema).min(1, "At least one item is required").safeParse(parsed);
-      if (!result.success) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid invoice items" });
-        return z.NEVER;
-      }
-      return result.data;
-    } catch {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid JSON for items" });
-      return z.NEVER;
-    }
-  }),
+  customer_id: z.string().uuid("Customer is required"),
+  project_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  quotation_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  billing_period_start: optionalDate(),
+  billing_period_end: optionalDate(),
+  due_date: optionalDate(),
+  tax_percent: z.coerce.number().min(0).max(100).default(18),
+  discount_amount: z.coerce.number().min(0).default(0),
+  tds_deducted: z.coerce.number().min(0).default(0),
+  notes: optionalText(2000),
+  items: jsonArray(invoiceItemSchema, "invoice items"),
 });
 
 export const paymentSchema = z.object({
   invoice_id: z.string().uuid("Invoice is required"),
-  amount: z.number().positive("Amount must be greater than 0"),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
   payment_method: z.enum(["cash", "bank_transfer", "cheque", "upi"]),
   payment_date: z.string().min(1, "Payment date is required"),
-  reference_number: z.string().max(100).optional().transform((v) => v || null),
-  tds_on_payment: z.number().min(0).default(0),
-  notes: z.string().max(2000).optional().transform((v) => v || null),
+  reference_number: optionalText(100),
+  tds_on_payment: z.coerce.number().min(0).default(0),
+  notes: optionalText(2000),
 });
 
 // ─── Submissions ─────────────────────────────────────────
 
 export const submissionSchema = z.object({
-  project_id: z.string().uuid("Project is required"),
+  project_id: z.string().uuid("Site is required"),
   period_start: z.string().min(1, "Start date is required"),
   period_end: z.string().min(1, "End date is required"),
-  include_attendance: z.boolean().default(true),
-  include_work_logs: z.boolean().default(true),
-  include_photos: z.boolean().default(true),
-  include_expenses: z.boolean().default(true),
-  include_invoice: z.boolean().default(false),
-  invoice_id: z.string().uuid().optional().transform((v) => v || null),
-  cover_note: z.string().max(2000).optional().transform((v) => v || null),
+  include_attendance: checkbox(),
+  include_work_logs: checkbox(),
+  include_photos: checkbox(),
+  include_expenses: checkbox(),
+  include_invoice: checkbox(),
+  invoice_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  cover_note: optionalText(2000),
   format: z.enum(["pdf", "zip", "excel"]).default("pdf"),
 });
 
@@ -290,50 +487,105 @@ export const submissionSchema = z.object({
 
 export const companySettingsSchema = z.object({
   company_name: z.string().min(1, "Company name is required").max(200),
-  address: z.string().max(500).optional().transform((v) => v || null),
+  address: optionalText(500),
   phone: phoneSchema,
   email: emailSchema,
-  gst_number: z.string().max(20).optional().transform((v) => v || null),
-  pan_number: z.string().max(10).optional().transform((v) => v || null),
-  bank_name: z.string().max(200).optional().transform((v) => v || null),
-  bank_account_no: z.string().max(30).optional().transform((v) => v || null),
-  bank_ifsc: z.string().max(15).optional().transform((v) => v || null),
+  gst_number: optionalText(20),
+  pan_number: optionalText(10),
+  bank_name: optionalText(200),
+  bank_account_no: optionalText(30),
+  bank_ifsc: optionalText(15),
   invoice_prefix: z.string().max(10).default("INV"),
   quotation_prefix: z.string().max(10).default("QT"),
-  work_order_prefix: z.string().max(10).default("WO"),
   expense_prefix: z.string().max(10).default("EXP"),
   project_prefix: z.string().max(10).default("PRJ"),
-  tax_rate: z.number().min(0).max(100).default(18),
-  shift_start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)").default("07:00"),
-  shift_end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)").default("17:00"),
-  ot_after_hours: z.number().min(1).max(24).default(8),
-  financial_year_start_month: z.number().int().min(1).max(12).default(4),
-  default_geofence_radius: z.number().min(10).default(500),
+  tax_rate: z.coerce.number().min(0).max(100).default(18),
+  shift_start_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
+    .default("07:00"),
+  shift_end_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
+    .default("17:00"),
+  ot_after_hours: z.coerce.number().min(1).max(24).default(8),
+  financial_year_start_month: z.coerce.number().int().min(1).max(12).default(4),
+  default_geofence_radius: z.coerce.number().min(10).default(500),
 });
 
-// ─── Documents ─────────────────────────────────────────────
+// ─── Documents ───────────────────────────────────────────
+
+export const DOCUMENT_ENTITY_TYPES = [
+  "employee",
+  "customer",
+  "project",
+  "quotation",
+  "invoice",
+  "expense",
+  "general",
+] as const;
 
 export const documentUploadSchema = z.object({
-  title: z.string().min(1, "Document title is required").max(300),
-  project_id: z.string().uuid("Project is required"),
-  doc_type: z.enum(["work_order", "drawing", "certificate", "letter", "other"]).default("other"),
-  // file itself is handled via FormData Blob
+  name: z.string().min(1, "Document name is required").max(300),
+  category: z
+    .enum([
+      "id_proof",
+      "agreement",
+      "permit",
+      "photo",
+      "report",
+      "invoice",
+      "other",
+    ])
+    .default("other"),
+  entity_type: z.enum(DOCUMENT_ENTITY_TYPES).default("general"),
+  entity_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v !== "none" ? v : null)),
+  notes: optionalText(1000),
 });
 
+// ─── Helpers ─────────────────────────────────────────────
+
+/**
+ * A JSON-encoded array delivered through a single FormData field.
+ * Accepts either an already-parsed array (direct action invocation) or a
+ * JSON string (FormData submission).
+ */
+function jsonArray<T extends z.ZodTypeAny>(item: T, label: string) {
+  return z.preprocess(
+    (raw) => {
+      if (typeof raw !== "string") return raw;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return raw;
+      }
+    },
+    z.array(item).min(1, `At least one ${label.replace(/s$/, "")} is required`)
+  );
+}
 
 /**
  * Extract and validate form data against a Zod schema.
- * Returns a discriminated union for proper TypeScript narrowing.
+ *
+ * Multi-value keys (checkbox groups) are collected into arrays; everything else
+ * is passed through as a string for the schema's coercion layer to handle.
+ * Empty strings are preserved so `optional*` helpers can map them to null.
  */
-export function parseFormData<T extends z.ZodSchema>(
+export function parseFormData<T extends z.ZodTypeAny>(
   schema: T,
   formData: FormData
 ): { success: true; data: z.infer<T> } | { success: false; error: string } {
   const raw: Record<string, unknown> = {};
 
-  formData.forEach((value, key) => {
-    raw[key] = String(value);
-  });
+  for (const key of new Set(formData.keys())) {
+    const values = formData.getAll(key);
+    const usable = values.filter((v) => !(v instanceof File));
+    if (usable.length === 0) continue;
+    raw[key] = usable.length > 1 ? usable.map(String) : String(usable[0]);
+  }
 
   const result = schema.safeParse(raw);
 
@@ -342,7 +594,7 @@ export function parseFormData<T extends z.ZodSchema>(
     return {
       success: false,
       error: firstError
-        ? `${firstError.path.join(".")}: ${firstError.message}`
+        ? `${firstError.path.join(".") || "Form"}: ${firstError.message}`
         : "Validation failed",
     };
   }

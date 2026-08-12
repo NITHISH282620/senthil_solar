@@ -78,10 +78,10 @@ export default async function PrintInvoicePage({ params }: PageProps) {
               <span className="text-gray-500">Due Date:</span>
               <span className="font-medium text-gray-900">{invoice.due_date ? formatDate(invoice.due_date) : "On Receipt"}</span>
             </div>
-            {invoice.work_order && (
+            {invoice.project && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Work Order:</span>
-                <span className="font-medium text-gray-900">{invoice.work_order.work_order_number}</span>
+                <span className="text-gray-500">Project:</span>
+                <span className="font-medium text-gray-900">{invoice.project.project_code}</span>
               </div>
             )}
           </div>

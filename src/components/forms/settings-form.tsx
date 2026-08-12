@@ -202,16 +202,6 @@ export function SettingsForm({ settings }: SettingsFormProps) {
               disabled={loading}
             />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="work_order_prefix">Work Order Prefix</Label>
-            <Input
-              id="work_order_prefix"
-              name="work_order_prefix"
-              defaultValue={settings.work_order_prefix}
-              disabled={loading}
-            />
-          </div>
         </CardContent>
       </Card>
 

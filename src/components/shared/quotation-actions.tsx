@@ -88,7 +88,7 @@ export function QuotationActions({
 
       {currentStatus === "approved" && isAdmin && (
         <Link 
-          href={`/work-orders/new?quotationId=${quotationId}`}
+          href={`/projects/new?quotationId=${quotationId}`}
           className={buttonVariants({ size: "sm" })}
         >
           <Wrench className="mr-2 h-4 w-4" />

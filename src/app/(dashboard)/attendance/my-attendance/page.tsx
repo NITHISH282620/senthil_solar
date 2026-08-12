@@ -45,7 +45,7 @@ export default async function MyAttendancePage({ searchParams }: PageProps) {
         />
         
         <div className="flex-shrink-0">
-          <CheckInOutButton todayRecord={todayRecord} />
+          <CheckInOutButton todayRecord={todayRecord ?? null} />
         </div>
       </div>
 

@@ -23,7 +23,8 @@ export type AttendanceStatus =
   | "present"
   | "absent"
   | "half_day"
-  | "leave";
+  | "leave"
+  | "holiday";
 
 export type WorkCategory =
   | "civil"
@@ -80,7 +81,14 @@ export type ProjectDocType =
 export type LeaveType = "sick" | "casual" | "annual" | "unpaid" | "other";
 export type LeaveStatus = "pending" | "approved" | "rejected";
 export type DocumentCategory = "id_proof" | "agreement" | "permit" | "photo" | "report" | "invoice" | "other";
-export type DocumentEntityType = "employee" | "customer" | "work_order" | "expense" | "general";
+export type DocumentEntityType =
+  | "employee"
+  | "customer"
+  | "project"
+  | "quotation"
+  | "invoice"
+  | "expense"
+  | "general";
 export type AuditAction = "document_upload" | "document_delete" | "other";
 
 // ─── Row types ──────────────────────────────────────────────
@@ -204,10 +212,6 @@ export interface WorkLog {
   remarks: string | null;
   created_at: string;
   updated_at: string;
-  // Joined fields
-  photos?: WorkLogPhoto[];
-  project?: Project;
-  submitter?: Profile;
 }
 
 export interface WorkLogPhoto {
@@ -243,9 +247,15 @@ export interface Expense {
   submitted_at: string;
   created_at: string;
   updated_at: string;
-  // Joined fields
-  employee?: Profile;
-  project?: Project;
+}
+
+export interface ExpenseItem {
+  id: string;
+  expense_id: string;
+  description: string;
+  amount: number;
+  receipt_url: string | null;
+  sort_order: number;
 }
 
 export interface SalaryAdvance {
@@ -262,9 +272,6 @@ export interface SalaryAdvance {
   created_at: string;
   // Computed
   remaining_balance?: number;
-  // Joined
-  employee?: Profile;
-  project?: Project;
 }
 
 export interface Payroll {
@@ -289,8 +296,6 @@ export interface Payroll {
   paid_reference: string | null;
   created_at: string;
   updated_at: string;
-  // Joined
-  employee?: Profile;
 }
 
 export interface Invoice {
@@ -317,9 +322,6 @@ export interface Invoice {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  // Joined
-  project?: Project;
-  items?: InvoiceItem[];
 }
 
 export interface InvoiceItem {
@@ -344,8 +346,6 @@ export interface Payment {
   notes: string | null;
   received_by: string | null;
   created_at: string;
-  // Joined
-  invoice?: Invoice;
 }
 
 export interface Submission {
@@ -366,9 +366,6 @@ export interface Submission {
   submitted_date: string | null;
   created_by: string | null;
   created_at: string;
-  // Joined
-  project?: Project;
-  invoice?: Invoice;
 }
 
 export interface CompanySettings {
@@ -442,28 +439,46 @@ export interface Customer {
   updated_at: string;
 }
 
-export interface WorkOrder {
+export type QuotationStatus =
+  | "draft"
+  | "sent"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "converted";
+
+export interface Quotation {
   id: string;
-  work_order_number: string;
+  quotation_number: string;
   customer_id: string;
-  quotation_id: string | null;
   title: string;
   description: string | null;
-  type: string;
-  priority: string;
-  status: string;
-  scheduled_date: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  site_address: string | null;
-  site_lat: number | null;
-  site_lng: number | null;
-  estimated_hours: number | null;
-  actual_hours: number | null;
+  system_capacity_kw: number | null;
+  panel_type: string | null;
+  inverter_type: string | null;
+  subtotal: number;
+  tax_percent: number;
+  tax_amount: number;
+  discount_amount: number;
+  total_amount: number;
+  status: QuotationStatus;
+  valid_until: string | null;
+  approved_by: string | null;
   created_by: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface QuotationItem {
+  id: string;
+  quotation_id: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  sort_order: number;
 }
 
 export interface Document {

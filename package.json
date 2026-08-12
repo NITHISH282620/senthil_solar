@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint src --max-warnings=40",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run lint && npm run build",
+    "db:start": "supabase start",
+    "db:reset": "supabase db reset",
+    "db:diff": "supabase db diff",
+    "db:types": "supabase gen types typescript --local > src/types/database.gen.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

@@ -270,7 +270,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          {(invoice.work_order || invoice.quotation) && (
+          {(invoice.project || invoice.quotation) && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -278,11 +278,11 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                {invoice.work_order && (
+                {invoice.project && (
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Work Order</span>
-                    <Link href={`/work-orders/${invoice.work_order.id}`} className="font-medium text-primary hover:underline">
-                      {invoice.work_order.work_order_number}
+                    <span className="text-muted-foreground">Project</span>
+                    <Link href={`/projects/${invoice.project.id}`} className="font-medium text-primary hover:underline">
+                      {invoice.project.project_code}
                     </Link>
                   </div>
                 )}

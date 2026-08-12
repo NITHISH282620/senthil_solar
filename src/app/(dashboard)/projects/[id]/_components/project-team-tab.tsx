@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { UserPlus, Trash2, Shield, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,11 +37,12 @@ import {
   getAvailableEmployeesForProject 
 } from "@/actions/projects";
 import type { ProjectWithRelations } from "@/actions/projects";
+import type { Profile } from "@/types/database";
 import { formatDate } from "@/lib/format";
 
 interface ProjectTeamTabProps {
   project: ProjectWithRelations;
-  currentUser: any;
+  currentUser: Profile | null;
 }
 
 export function ProjectTeamTab({ project, currentUser }: ProjectTeamTabProps) {
@@ -54,13 +55,7 @@ export function ProjectTeamTab({ project, currentUser }: ProjectTeamTabProps) {
   
   const assignments = project.assignments || [];
 
-  useEffect(() => {
-    if (isAssignOpen && canManageTeam) {
-      loadEmployees();
-    }
-  }, [isAssignOpen, canManageTeam]);
-
-  async function loadEmployees() {
+  const loadEmployees = useCallback(async () => {
     setLoadingEmployees(true);
     const { data, error } = await getAvailableEmployeesForProject();
     if (error) {
@@ -71,6 +66,13 @@ export function ProjectTeamTab({ project, currentUser }: ProjectTeamTabProps) {
       setAvailableEmployees(data.filter(emp => !assignedIds.has(emp.id)));
     }
     setLoadingEmployees(false);
+  }, [assignments]);
+
+  function handleAssignOpenChange(open: boolean) {
+    setIsAssignOpen(open);
+    // Fetch on the open event rather than in an effect: this is a response to
+    // a user interaction, not a synchronisation with external state.
+    if (open && canManageTeam) void loadEmployees();
   }
 
   async function handleAssign(formData: FormData) {
@@ -109,12 +111,10 @@ export function ProjectTeamTab({ project, currentUser }: ProjectTeamTabProps) {
           <CardDescription>Manage workers and supervisors assigned to this project.</CardDescription>
         </div>
         {canManageTeam && (
-          <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <UserPlus className="h-4 w-4 mr-2" />
-                Assign Member
-              </Button>
+          <Dialog open={isAssignOpen} onOpenChange={handleAssignOpenChange}>
+            <DialogTrigger render={<Button size="sm" />}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Assign Member
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>

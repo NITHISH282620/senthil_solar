@@ -12,13 +12,15 @@ export interface DocumentWithUploader extends Document {
 
 const BUCKET_NAME = "documents";
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
 async function logAudit(
-  supabase: any,
+  supabase: SupabaseServerClient,
   userId: string,
   action: string,
   entityType: string,
   entityId: string | null,
-  details: Record<string, any>
+  details: Record<string, unknown>
 ) {
   await supabase.from("audit_logs").insert({
     user_id: userId,
@@ -124,9 +126,9 @@ export async function uploadDocument(formData: FormData) {
   if (parsed.data.entity_id) {
     let route = "";
     switch (parsed.data.entity_type) {
-      case "work_order": route = `/work-orders/${parsed.data.entity_id}`; break;
+      case "project": route = `/projects/${parsed.data.entity_id}`; break;
       case "customer": route = `/customers/${parsed.data.entity_id}`; break;
-      case "employee": route = `/team/${parsed.data.entity_id}`; break;
+      case "employee": route = `/employees/${parsed.data.entity_id}`; break;
       case "quotation": route = `/quotations/${parsed.data.entity_id}`; break;
       case "invoice": route = `/billing/${parsed.data.entity_id}`; break;
       case "expense": route = `/expenses/${parsed.data.entity_id}`; break;
@@ -193,9 +195,9 @@ export async function deleteDocument(id: string) {
   if (doc.entity_id) {
     let route = "";
     switch (doc.entity_type) {
-      case "work_order": route = `/work-orders/${doc.entity_id}`; break;
+      case "project": route = `/projects/${doc.entity_id}`; break;
       case "customer": route = `/customers/${doc.entity_id}`; break;
-      case "employee": route = `/team/${doc.entity_id}`; break;
+      case "employee": route = `/employees/${doc.entity_id}`; break;
       case "quotation": route = `/quotations/${doc.entity_id}`; break;
       case "invoice": route = `/billing/${doc.entity_id}`; break;
       case "expense": route = `/expenses/${doc.entity_id}`; break;

@@ -84,12 +84,12 @@ export async function getCustomer(
 export async function createCustomer(formData: FormData) {
   const currentUser = await getCurrentUser();
   if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
-    return { error: "Unauthorized. Only admins and managers can create customers." };
+    return { data: null, error: "Unauthorized. Only admins and managers can create customers." };
   }
 
   const parsed = parseFormData(createCustomerSchema, formData);
   if (!parsed.success) {
-    return { error: parsed.error };
+    return { data: null, error: parsed.error };
   }
 
   const v = parsed.data;
@@ -118,7 +118,7 @@ export async function createCustomer(formData: FormData) {
     .single();
 
   if (error) {
-    return { error: error.message };
+    return { data: null, error: error.message };
   }
 
   revalidatePath("/customers");

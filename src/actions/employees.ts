@@ -87,12 +87,12 @@ export async function getEmployee(
 export async function createEmployee(formData: FormData) {
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== "admin") {
-    return { error: "Unauthorized. Only admins can create employees." };
+    return { data: null, error: "Unauthorized. Only admins can create employees." };
   }
 
   const parsed = parseFormData(createEmployeeSchema, formData);
   if (!parsed.success) {
-    return { error: parsed.error };
+    return { data: null, error: parsed.error };
   }
 
   const v = parsed.data;
@@ -108,7 +108,7 @@ export async function createEmployee(formData: FormData) {
     });
 
   if (authError) {
-    return { error: authError.message };
+    return { data: null, error: authError.message };
   }
 
   // Generate employee ID using database sequence
@@ -133,7 +133,14 @@ export async function createEmployee(formData: FormData) {
       department: v.department,
       designation: v.designation,
       date_of_joining: v.date_of_joining,
-      salary: v.salary,
+      employee_type: v.employee_type,
+      daily_rate: v.daily_rate,
+      monthly_salary: v.monthly_salary,
+      ot_rate_per_hour: v.ot_rate_per_hour,
+      bank_account_no: v.bank_account_no,
+      bank_ifsc: v.bank_ifsc,
+      bank_name: v.bank_name,
+      aadhar_number: v.aadhar_number,
       address: v.address,
       emergency_contact_name: v.emergency_contact_name,
       emergency_contact_phone: v.emergency_contact_phone,
@@ -143,7 +150,7 @@ export async function createEmployee(formData: FormData) {
 
   if (profileError) {
     await adminSupabase.auth.admin.deleteUser(authData.user.id);
-    return { error: profileError.message };
+    return { data: null, error: profileError.message };
   }
 
   revalidatePath("/employees");
@@ -184,7 +191,14 @@ export async function updateEmployee(id: string, formData: FormData) {
 
   if (currentUser.role === "admin") {
     if (v.role) updates.role = v.role;
-    if (v.salary !== null) updates.salary = v.salary;
+    if (v.employee_type) updates.employee_type = v.employee_type;
+    updates.daily_rate = v.daily_rate;
+    updates.monthly_salary = v.monthly_salary;
+    updates.ot_rate_per_hour = v.ot_rate_per_hour;
+    updates.bank_account_no = v.bank_account_no;
+    updates.bank_ifsc = v.bank_ifsc;
+    updates.bank_name = v.bank_name;
+    updates.aadhar_number = v.aadhar_number;
     if (v.date_of_joining) updates.date_of_joining = v.date_of_joining;
     updates.manager_id = v.manager_id;
     updates.is_active = v.is_active;

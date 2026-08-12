@@ -29,23 +29,23 @@ interface InvoiceItemInput {
 
 interface InvoiceFormProps {
   customers: { id: string; name: string; customer_id: string }[];
-  workOrders?: { id: string; work_order_number: string; title: string; customer_id: string; quotation_id?: string | null }[];
+  projects?: { id: string; project_code: string; name: string }[];
   defaultTaxRate?: number;
-  prefilledWorkOrderId?: string;
+  prefilledProjectId?: string;
   prefilledCustomerId?: string;
 }
 
 export function InvoiceForm({
   customers,
-  workOrders = [],
+  projects = [],
   defaultTaxRate = 18,
-  prefilledWorkOrderId,
+  prefilledProjectId,
   prefilledCustomerId,
 }: InvoiceFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [customerId, setCustomerId] = useState(prefilledCustomerId || "");
-  const [workOrderId, setWorkOrderId] = useState(prefilledWorkOrderId || "");
+  const [projectId, setProjectId] = useState(prefilledProjectId || "");
   
   const initialItems: InvoiceItemInput[] = [
     { id: crypto.randomUUID(), description: "", unit: "nos", quantity: 1, unit_price: 0 },
@@ -59,19 +59,6 @@ export function InvoiceForm({
   const taxableAmount = Math.max(0, subtotal - discount);
   const taxAmount = (taxableAmount * taxPercent) / 100;
   const total = taxableAmount + taxAmount;
-
-  // Find linked quotation from the selected work order (if any)
-  const selectedWO = workOrders.find(wo => wo.id === workOrderId);
-  const quotationId = selectedWO?.quotation_id || "";
-
-  // Auto-select customer if work order is chosen
-  const handleWorkOrderChange = (woId: string) => {
-    setWorkOrderId(woId);
-    const wo = workOrders.find((w) => w.id === woId);
-    if (wo && wo.customer_id) {
-      setCustomerId(wo.customer_id);
-    }
-  };
 
   const addItem = () => {
     setItems([...items, { id: crypto.randomUUID(), description: "", unit: "nos", quantity: 1, unit_price: 0 }]);
@@ -111,22 +98,21 @@ export function InvoiceForm({
 
     try {
       formData.set("customer_id", customerId);
-      if (workOrderId) formData.set("work_order_id", workOrderId);
-      if (quotationId) formData.set("quotation_id", quotationId);
+      if (projectId) formData.set("project_id", projectId);
       formData.set("tax_percent", taxPercent.toString());
       formData.set("discount_amount", discount.toString());
       formData.set("items", JSON.stringify(validItems));
 
       const result = await createInvoice(formData);
 
-      if (result?.error) {
-        toast.error(result.error);
+      if (result.error || !result.data) {
+        toast.error(result.error ?? "Could not create invoice.");
       } else {
         toast.success("Invoice created successfully");
-        router.push(`/billing/${(result as any).data.id}`);
+        router.push(`/billing/${result.data.id}`);
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -158,16 +144,16 @@ export function InvoiceForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="workOrder">Linked Work Order</Label>
-              <Select value={workOrderId} onValueChange={(v) => handleWorkOrderChange(v || "")}>
+              <Label htmlFor="project">Linked Project</Label>
+              <Select value={projectId} onValueChange={(v) => setProjectId(v || "")}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select work order (optional)" />
+                  <SelectValue placeholder="Select project (optional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {workOrders.map((wo) => (
-                    <SelectItem key={wo.id} value={wo.id}>
-                      {wo.work_order_number} - {wo.title}
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.project_code} - {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

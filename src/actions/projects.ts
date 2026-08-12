@@ -133,12 +133,12 @@ export async function getProject(
 export async function createProject(formData: FormData) {
   const currentUser = await getCurrentUser();
   if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
-    return { error: "Unauthorized. Only admins and managers can create projects." };
+    return { data: null, error: "Unauthorized. Only admins and managers can create projects." };
   }
 
   const parsed = parseFormData(createProjectSchema, formData);
   if (!parsed.success) {
-    return { error: parsed.error };
+    return { data: null, error: parsed.error };
   }
 
   const supabase = await createClient();
@@ -166,7 +166,7 @@ export async function createProject(formData: FormData) {
     .single();
 
   if (error) {
-    return { error: error.message };
+    return { data: null, error: error.message };
   }
 
   const prjId = (data as { id: string }).id;

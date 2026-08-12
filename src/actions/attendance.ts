@@ -135,7 +135,7 @@ export async function updateAttendanceStatus(id: string, status: string, notes?:
   }
 
   const supabase = await createClient();
-  const updates: any = { status };
+  const updates: Record<string, unknown> = { status };
   if (notes) updates.notes = notes;
 
   const { error } = await supabase

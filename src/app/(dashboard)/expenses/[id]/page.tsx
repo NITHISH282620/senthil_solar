@@ -146,18 +146,18 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {expense.work_order && (
+              {expense.project && (
                 <>
                   <Separator />
                   <div className="flex items-start gap-3">
                     <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5" />
                     <div>
-                      <div className="text-muted-foreground mb-1">Linked Work Order</div>
-                      <Link 
-                        href={`/work-orders/${expense.work_order.id}`}
+                      <div className="text-muted-foreground mb-1">Linked Project</div>
+                      <Link
+                        href={`/projects/${expense.project.id}`}
                         className="font-medium text-amber-600 hover:underline"
                       >
-                        {expense.work_order.work_order_number}
+                        {expense.project.project_code}
                       </Link>
                     </div>
                   </div>

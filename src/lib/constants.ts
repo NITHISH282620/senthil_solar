@@ -18,6 +18,7 @@ export const ATTENDANCE_STATUSES = [
   { value: "absent", label: "Absent", color: "bg-red-500" },
   { value: "half_day", label: "Half Day", color: "bg-amber-500" },
   { value: "leave", label: "Leave", color: "bg-blue-500" },
+  { value: "holiday", label: "Holiday", color: "bg-violet-500" },
 ] as const;
 
 export const PROJECT_STATUSES = [
@@ -109,26 +110,47 @@ export const PROJECT_DOC_TYPES = [
 export const DEFAULT_PAGE_SIZE = 10;
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-// Export legacy constants for backward compatibility while migrating
-export const WORK_ORDER_TYPES = [
+// ─── Client companies ────────────────────────────────────
+
+export const CUSTOMER_SOURCES = [
+  { value: "referral", label: "Referral" },
+  { value: "website", label: "Website" },
+  { value: "walk_in", label: "Walk In" },
+  { value: "social_media", label: "Social Media" },
+  { value: "other", label: "Other" },
+] as const;
+
+export const CUSTOMER_STATUSES = [
+  { value: "active", label: "Active", color: "bg-emerald-500" },
+  { value: "prospect", label: "Prospect", color: "bg-blue-500" },
+  { value: "inactive", label: "Inactive", color: "bg-stone-500" },
+] as const;
+
+// ─── Workforce ───────────────────────────────────────────
+
+export const DEPARTMENTS = [
+  { value: "operations", label: "Operations" },
   { value: "installation", label: "Installation" },
-  { value: "maintenance", label: "Maintenance" },
-  { value: "repair", label: "Repair" },
-  { value: "inspection", label: "Inspection" },
+  { value: "electrical", label: "Electrical" },
+  { value: "civil", label: "Civil" },
+  { value: "stores", label: "Stores & Logistics" },
+  { value: "accounts", label: "Accounts" },
+  { value: "admin", label: "Administration" },
 ] as const;
 
-export const WORK_ORDER_PRIORITIES = [
-  { value: "low", label: "Low", color: "bg-gray-500" },
-  { value: "medium", label: "Medium", color: "bg-blue-500" },
-  { value: "high", label: "High", color: "bg-amber-500" },
-  { value: "urgent", label: "Urgent", color: "bg-red-500" },
+export const QUOTATION_STATUSES = [
+  { value: "draft", label: "Draft", color: "bg-gray-500" },
+  { value: "sent", label: "Sent", color: "bg-blue-500" },
+  { value: "approved", label: "Approved", color: "bg-emerald-500" },
+  { value: "rejected", label: "Rejected", color: "bg-red-500" },
+  { value: "expired", label: "Expired", color: "bg-amber-500" },
+  { value: "converted", label: "Converted", color: "bg-purple-500" },
 ] as const;
 
-export const WORK_ORDER_STATUSES = [
-  { value: "pending", label: "Pending", color: "bg-gray-500" },
-  { value: "scheduled", label: "Scheduled", color: "bg-blue-500" },
-  { value: "in_progress", label: "In Progress", color: "bg-amber-500" },
-  { value: "on_hold", label: "On Hold", color: "bg-orange-500" },
-  { value: "completed", label: "Completed", color: "bg-emerald-500" },
-  { value: "cancelled", label: "Cancelled", color: "bg-red-500" },
+export const LEAVE_TYPES = [
+  { value: "sick", label: "Sick Leave" },
+  { value: "casual", label: "Casual Leave" },
+  { value: "annual", label: "Annual Leave" },
+  { value: "unpaid", label: "Unpaid Leave" },
+  { value: "other", label: "Other" },
 ] as const;

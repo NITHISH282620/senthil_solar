@@ -92,8 +92,8 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
               {DEPARTMENTS.map((dept) => (
-                <SelectItem key={dept} value={dept}>
-                  {dept}
+                <SelectItem key={dept.value} value={dept.value}>
+                  {dept.label}
                 </SelectItem>
               ))}
             </SelectContent>

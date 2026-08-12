@@ -13,8 +13,8 @@ export default function UnauthorizedPage() {
         </p>
         
         <div className="pt-6">
-          <Button asChild>
-            <Link href="/auth/logout">Sign Out & Try Again</Link>
+          <Button render={<Link href="/auth/logout" />}>
+            Sign Out &amp; Try Again
           </Button>
         </div>
       </div>
