@@ -12,6 +12,12 @@ import {
 } from "@/lib/validations";
 import type { Profile } from "@/types/database";
 
+/** The form still speaks in employee types; profiles.wage_mode is the column. */
+const WAGE_MODE_BY_EMPLOYEE_TYPE = {
+  daily_wage: "daily",
+  monthly_salary: "monthly",
+} as const;
+
 /**
  * Fetch all employees with optional search & filters
  */
@@ -32,7 +38,7 @@ export async function getEmployees(params?: {
     const safe = sanitizeSearchInput(params.search);
     if (safe) {
       query = query.or(
-        `full_name.ilike.%${safe}%,email.ilike.%${safe}%,employee_id.ilike.%${safe}%`
+        `full_name.ilike.%${safe}%,email.ilike.%${safe}%,employee_code.ilike.%${safe}%`
       );
     }
   }
@@ -111,42 +117,35 @@ export async function createEmployee(formData: FormData) {
     return { data: null, error: authError.message };
   }
 
-  // Generate employee ID using database sequence
-  const { data: seqData, error: seqError } = await adminSupabase.rpc(
-    "next_document_number",
-    { p_doc_type: "employee", p_prefix: "SOL" }
-  );
-
-  const employee_id = seqError
-    ? `SOL-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
-    : (seqData as string);
-
-  const { error: profileError } = await adminSupabase
+  // The handle_new_user trigger already created the profile row and allocated
+  // its employee_code, so fill in the rest rather than inserting a second row.
+  const { data: profileRow, error: profileError } = await adminSupabase
     .from("profiles")
-    .insert({
-      id: authData.user.id,
-      employee_id,
+    .update({
       full_name: v.full_name,
-      email: v.email,
       phone: v.phone,
       role: v.role,
       department: v.department,
       designation: v.designation,
       date_of_joining: v.date_of_joining,
-      employee_type: v.employee_type,
+      wage_mode: WAGE_MODE_BY_EMPLOYEE_TYPE[v.employee_type],
       daily_rate: v.daily_rate,
       monthly_salary: v.monthly_salary,
       ot_rate_per_hour: v.ot_rate_per_hour,
       bank_account_no: v.bank_account_no,
       bank_ifsc: v.bank_ifsc,
       bank_name: v.bank_name,
-      aadhar_number: v.aadhar_number,
+      aadhaar_number: v.aadhar_number,
       address: v.address,
       emergency_contact_name: v.emergency_contact_name,
       emergency_contact_phone: v.emergency_contact_phone,
-      manager_id: v.manager_id,
+      reports_to: v.manager_id,
       is_active: true,
-    });
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", authData.user.id)
+    .select("employee_code")
+    .single();
 
   if (profileError) {
     await adminSupabase.auth.admin.deleteUser(authData.user.id);
@@ -154,7 +153,13 @@ export async function createEmployee(formData: FormData) {
   }
 
   revalidatePath("/employees");
-  return { data: { id: authData.user.id, employee_id }, error: null };
+  return {
+    data: {
+      id: authData.user.id,
+      employee_code: (profileRow as { employee_code: string }).employee_code,
+    },
+    error: null,
+  };
 }
 
 /**
@@ -191,16 +196,17 @@ export async function updateEmployee(id: string, formData: FormData) {
 
   if (currentUser.role === "owner") {
     if (v.role) updates.role = v.role;
-    if (v.employee_type) updates.employee_type = v.employee_type;
+    if (v.employee_type)
+      updates.wage_mode = WAGE_MODE_BY_EMPLOYEE_TYPE[v.employee_type];
     updates.daily_rate = v.daily_rate;
     updates.monthly_salary = v.monthly_salary;
     updates.ot_rate_per_hour = v.ot_rate_per_hour;
     updates.bank_account_no = v.bank_account_no;
     updates.bank_ifsc = v.bank_ifsc;
     updates.bank_name = v.bank_name;
-    updates.aadhar_number = v.aadhar_number;
+    updates.aadhaar_number = v.aadhar_number;
     if (v.date_of_joining) updates.date_of_joining = v.date_of_joining;
-    updates.manager_id = v.manager_id;
+    updates.reports_to = v.manager_id;
     updates.is_active = v.is_active;
   }
 
@@ -246,21 +252,21 @@ export async function toggleEmployeeStatus(id: string, isActive: boolean) {
  * Get managers list for dropdown
  */
 export async function getManagers(): Promise<{
-  data: { id: string; full_name: string; employee_id: string }[] | null;
+  data: { id: string; full_name: string; employee_code: string }[] | null;
   error: string | null;
 }> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_id")
+    .select("id, full_name, employee_code")
     .in("role", ["owner", "manager"])
     .eq("is_active", true)
     .order("full_name");
 
   if (error) return { data: null, error: error.message };
   return {
-    data: data as { id: string; full_name: string; employee_id: string }[],
+    data: data as { id: string; full_name: string; employee_code: string }[],
     error: null,
   };
 }

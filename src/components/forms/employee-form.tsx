@@ -24,7 +24,7 @@ import type { Profile } from "@/types/database";
 
 interface EmployeeFormProps {
   employee?: Profile | null;
-  managers?: { id: string; full_name: string; employee_id: string }[];
+  managers?: { id: string; full_name: string; employee_code: string }[];
   isAdmin: boolean;
 }
 

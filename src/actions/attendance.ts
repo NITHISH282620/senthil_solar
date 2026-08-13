@@ -82,10 +82,10 @@ export async function checkIn(location_lat?: number, location_lng?: number) {
       {
         employee_id: currentUser.id,
         date: today,
-        check_in: now,
+        check_in_at: now,
         status: "present",
-        location_lat: location_lat || null,
-        location_lng: location_lng || null,
+        check_in_lat: location_lat || null,
+        check_in_lng: location_lng || null,
       },
       { onConflict: "employee_id,date" }
     );
@@ -118,7 +118,7 @@ export async function checkOut() {
 
   const { error } = await supabase
     .from("attendance")
-    .update({ check_out: now })
+    .update({ check_out_at: now })
     .eq("id", existing.id);
 
   if (error) return { error: error.message };
