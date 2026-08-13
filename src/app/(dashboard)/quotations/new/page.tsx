@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/actions/auth";
-import { getCustomersForDropdown } from "@/actions/quotations";
+import { getCompaniesForDropdown } from "@/actions/quotations";
 import { QuotationForm } from "@/components/forms/quotation-form";
 import { PageHeader } from "@/components/shared/page-header";
 import type { Metadata } from "next";
@@ -12,11 +12,11 @@ export const metadata: Metadata = {
 export default async function NewQuotationPage() {
   const currentUser = await getCurrentUser();
 
-  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
     redirect("/dashboard");
   }
 
-  const { data: customers } = await getCustomersForDropdown();
+  const { data: companies } = await getCompaniesForDropdown();
 
   return (
     <div className="space-y-6">
@@ -24,7 +24,7 @@ export default async function NewQuotationPage() {
         title="New Quotation"
         description="Create a quotation for a customer"
       />
-      <QuotationForm customers={customers ?? []} />
+      <QuotationForm companies={companies ?? []} />
     </div>
   );
 }

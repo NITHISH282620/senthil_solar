@@ -86,7 +86,7 @@ export async function getEmployee(
  */
 export async function createEmployee(formData: FormData) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || currentUser.role !== "admin") {
+  if (!currentUser || currentUser.role !== "owner") {
     return { data: null, error: "Unauthorized. Only admins can create employees." };
   }
 
@@ -113,8 +113,8 @@ export async function createEmployee(formData: FormData) {
 
   // Generate employee ID using database sequence
   const { data: seqData, error: seqError } = await adminSupabase.rpc(
-    "next_sequence",
-    { seq_name: "employee", prefix: "SOL" }
+    "next_document_number",
+    { p_doc_type: "employee", p_prefix: "SOL" }
   );
 
   const employee_id = seqError
@@ -166,7 +166,7 @@ export async function updateEmployee(id: string, formData: FormData) {
     return { error: "Unauthorized." };
   }
 
-  if (currentUser.role !== "admin" && currentUser.id !== id) {
+  if (currentUser.role !== "owner" && currentUser.id !== id) {
     return { error: "Unauthorized. Only admins can edit other employees." };
   }
 
@@ -189,7 +189,7 @@ export async function updateEmployee(id: string, formData: FormData) {
     updated_at: new Date().toISOString(),
   };
 
-  if (currentUser.role === "admin") {
+  if (currentUser.role === "owner") {
     if (v.role) updates.role = v.role;
     if (v.employee_type) updates.employee_type = v.employee_type;
     updates.daily_rate = v.daily_rate;
@@ -223,7 +223,7 @@ export async function updateEmployee(id: string, formData: FormData) {
  */
 export async function toggleEmployeeStatus(id: string, isActive: boolean) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || currentUser.role !== "admin") {
+  if (!currentUser || currentUser.role !== "owner") {
     return { error: "Unauthorized." };
   }
 
@@ -254,7 +254,7 @@ export async function getManagers(): Promise<{
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name, employee_id")
-    .in("role", ["admin", "manager"])
+    .in("role", ["owner", "manager"])
     .eq("is_active", true)
     .order("full_name");
 

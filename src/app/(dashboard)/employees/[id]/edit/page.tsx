@@ -27,7 +27,7 @@ export default async function EditEmployeePage({ params }: PageProps) {
   }
 
   // Only admin can edit others, users can edit themselves
-  const isAdmin = currentUser.role === "admin";
+  const isAdmin = currentUser.role === "owner";
   if (!isAdmin && currentUser.id !== employee.id) {
     redirect("/dashboard");
   }

@@ -37,12 +37,12 @@ interface LineItem {
   unit: string;
   quantity: number;
   unit_price: number;
-  total_price: number;
+  line_total: number;
 }
 
 interface QuotationFormProps {
   quotation?: QuotationWithRelations | null;
-  customers: { id: string; name: string; customer_id: string }[];
+  companies: { id: string; name: string; company_code: string }[];
 }
 
 const emptyItem: LineItem = {
@@ -50,10 +50,10 @@ const emptyItem: LineItem = {
   unit: "nos",
   quantity: 1,
   unit_price: 0,
-  total_price: 0,
+  line_total: 0,
 };
 
-export function QuotationForm({ quotation, customers }: QuotationFormProps) {
+export function QuotationForm({ quotation, companies }: QuotationFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const isEdit = !!quotation;
@@ -64,19 +64,19 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
       unit: i.unit,
       quantity: i.quantity,
       unit_price: i.unit_price,
-      total_price: i.total_price,
+      line_total: i.line_total ?? 0,
     })) ?? [{ ...emptyItem }]
   );
 
-  const [taxPercent, setTaxPercent] = useState(quotation?.tax_percent ?? 18);
+  const [gstPercent, setGstPercent] = useState(quotation?.gst_percent ?? 18);
   const [discountAmount, setDiscountAmount] = useState(
     quotation?.discount_amount ?? 0
   );
 
   // Calculations
-  const subtotal = items.reduce((sum, item) => sum + item.total_price, 0);
-  const taxAmount = (subtotal * taxPercent) / 100;
-  const totalAmount = subtotal + taxAmount - discountAmount;
+  const subtotal = items.reduce((sum, item) => sum + item.line_total, 0);
+  const gstAmount = (subtotal * gstPercent) / 100;
+  const totalAmount = subtotal + gstAmount - discountAmount;
 
   function addItem() {
     setItems([...items, { ...emptyItem }]);
@@ -97,9 +97,9 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
       item[field] = Number(value) || 0;
     }
 
-    // Recalculate total_price
+    // Recalculate line_total
     if (field === "quantity" || field === "unit_price") {
-      item.total_price = item.quantity * item.unit_price;
+      item.line_total = item.quantity * item.unit_price;
     }
 
     updated[index] = item;
@@ -118,17 +118,17 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
     }
 
     const quotationData: Record<string, unknown> = {
-      customer_id: formData.get("customer_id") as string,
+      company_id: formData.get("company_id") as string,
       title: formData.get("title") as string,
       description: (formData.get("description") as string) || null,
-      system_capacity_kw: formData.get("system_capacity_kw")
-        ? Number(formData.get("system_capacity_kw"))
+      capacity_kw: formData.get("capacity_kw")
+        ? Number(formData.get("capacity_kw"))
         : null,
       panel_type: (formData.get("panel_type") as string) || null,
       inverter_type: (formData.get("inverter_type") as string) || null,
       subtotal,
-      tax_percent: taxPercent,
-      tax_amount: taxAmount,
+      gst_percent: gstPercent,
+      gst_amount: gstAmount,
       discount_amount: discountAmount,
       total_amount: totalAmount,
       valid_until: (formData.get("valid_until") as string) || null,
@@ -171,20 +171,20 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="customer_id">Customer *</Label>
+            <Label htmlFor="company_id">Company *</Label>
             <Select
-              name="customer_id"
-              defaultValue={quotation?.customer_id ?? ""}
+              name="company_id"
+              defaultValue={quotation?.company_id ?? ""}
               required
               disabled={loading}
             >
-              <SelectTrigger id="customer_id">
-                <SelectValue placeholder="Select customer" />
+              <SelectTrigger id="company_id">
+                <SelectValue placeholder="Select company" />
               </SelectTrigger>
               <SelectContent>
-                {customers.map((c) => (
+                {companies.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.customer_id})
+                    {c.name} ({c.company_code})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -216,13 +216,13 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="system_capacity_kw">System Capacity (kW)</Label>
+            <Label htmlFor="capacity_kw">System Capacity (kW)</Label>
             <Input
-              id="system_capacity_kw"
-              name="system_capacity_kw"
+              id="capacity_kw"
+              name="capacity_kw"
               type="number"
-              step="0.01"
-              defaultValue={quotation?.system_capacity_kw ?? ""}
+              step="0.001"
+              defaultValue={quotation?.capacity_kw ?? ""}
               placeholder="e.g., 5.00"
               disabled={loading}
             />
@@ -342,7 +342,7 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
                       />
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(item.total_price)}
+                      {formatCurrency(item.line_total)}
                     </TableCell>
                     <TableCell>
                       {items.length > 1 && (
@@ -375,14 +375,14 @@ export function QuotationForm({ quotation, customers }: QuotationFormProps) {
                 <span className="text-muted-foreground">Tax (%)</span>
                 <Input
                   type="number"
-                  value={taxPercent}
-                  onChange={(e) => setTaxPercent(Number(e.target.value) || 0)}
+                  value={gstPercent}
+                  onChange={(e) => setGstPercent(Number(e.target.value) || 0)}
                   className="h-8 w-20 text-right"
                   step="0.01"
                   disabled={loading}
                 />
                 <span className="font-medium w-24 text-right">
-                  {formatCurrency(taxAmount)}
+                  {formatCurrency(gstAmount)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm gap-2">

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default async function NewEmployeePage() {
   const currentUser = await getCurrentUser();
 
-  if (!currentUser || currentUser.role !== "admin") {
+  if (!currentUser || currentUser.role !== "owner") {
     redirect("/dashboard");
   }
 

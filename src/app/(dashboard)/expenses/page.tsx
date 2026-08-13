@@ -94,7 +94,7 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Expense</TableHead>
-              {currentUser?.role !== "employee" && <TableHead>Employee</TableHead>}
+              {currentUser?.role !== "worker" && <TableHead>Employee</TableHead>}
               <TableHead>Category</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-right">Amount</TableHead>
@@ -104,7 +104,7 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
           <TableBody>
             {expenses?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={currentUser?.role !== "employee" ? 6 : 5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={currentUser?.role !== "worker" ? 6 : 5} className="h-24 text-center text-muted-foreground">
                   No expenses found.
                 </TableCell>
               </TableRow>
@@ -122,20 +122,20 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
                       {expense.title}
                     </div>
                   </TableCell>
-                  {currentUser?.role !== "employee" && (
+                  {currentUser?.role !== "worker" && (
                     <TableCell>
                       {expense.employee?.full_name}
                       <div className="text-xs text-muted-foreground">
-                        {expense.employee?.employee_id}
+                        {expense.employee?.employee_code}
                       </div>
                     </TableCell>
                   )}
                   <TableCell className="capitalize">{expense.category}</TableCell>
                   <TableCell>
-                    {formatDate(expense.submitted_at)}
+                    {formatDate(expense.created_at)}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(expense.total_amount)}
+                    {formatCurrency(expense.amount ?? 0)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={expense.status} />

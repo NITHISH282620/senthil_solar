@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Pencil, Mail, Phone, MapPin, Calendar, Building2, Shield } from "lucide-react";
+import { Pencil, Mail, Phone, Building2, Shield } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -39,7 +39,7 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === "owner";
   const isSelf = currentUser?.id === employee.id;
 
   const initials = employee.full_name
@@ -80,7 +80,7 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
                 />
               </div>
               <p className="text-muted-foreground font-mono">
-                {employee.employee_id}
+                {employee.employee_code}
               </p>
               <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5">
@@ -124,9 +124,9 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
             />
             {isAdmin && (
               <InfoRow
-                label="Salary"
+                label="Monthly Salary"
                 value={
-                  employee.salary ? formatCurrency(employee.salary) : "—"
+                  employee.monthly_salary ? formatCurrency(employee.monthly_salary) : "—"
                 }
               />
             )}

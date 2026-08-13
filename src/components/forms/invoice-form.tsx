@@ -28,37 +28,38 @@ interface InvoiceItemInput {
 }
 
 interface InvoiceFormProps {
-  customers: { id: string; name: string; customer_id: string }[];
-  projects?: { id: string; project_code: string; name: string }[];
-  defaultTaxRate?: number;
-  prefilledProjectId?: string;
-  prefilledCustomerId?: string;
+  companies: { id: string; name: string; company_code: string }[];
+  contracts?: { id: string; contract_number: string; title: string }[];
+  defaultGstRate?: number;
+  prefilledContractId?: string;
+  prefilledCompanyId?: string;
 }
 
 export function InvoiceForm({
-  customers,
-  projects = [],
-  defaultTaxRate = 18,
-  prefilledProjectId,
-  prefilledCustomerId,
+  companies,
+  contracts = [],
+  defaultGstRate = 18,
+  prefilledContractId,
+  prefilledCompanyId,
 }: InvoiceFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [customerId, setCustomerId] = useState(prefilledCustomerId || "");
-  const [projectId, setProjectId] = useState(prefilledProjectId || "");
+  const [companyId, setCompanyId] = useState(prefilledCompanyId || "");
+  const [contractId, setContractId] = useState(prefilledContractId || "");
   
   const initialItems: InvoiceItemInput[] = [
     { id: crypto.randomUUID(), description: "", unit: "nos", quantity: 1, unit_price: 0 },
   ];
   
   const [items, setItems] = useState<InvoiceItemInput[]>(initialItems);
-  const [taxPercent, setTaxPercent] = useState<number>(defaultTaxRate);
+  const [gstPercent, setGstPercent] = useState<number>(defaultGstRate);
   const [discount, setDiscount] = useState<number>(0);
 
   const subtotal = items.reduce((acc, item) => acc + (item.quantity || 0) * (item.unit_price || 0), 0);
   const taxableAmount = Math.max(0, subtotal - discount);
-  const taxAmount = (taxableAmount * taxPercent) / 100;
-  const total = taxableAmount + taxAmount;
+  // For simplicity here, assuming intra-state (CGST + SGST)
+  const gstAmount = (taxableAmount * gstPercent) / 100;
+  const totalAmount = taxableAmount + gstAmount;
 
   const addItem = () => {
     setItems([...items, { id: crypto.randomUUID(), description: "", unit: "nos", quantity: 1, unit_price: 0 }]);
@@ -89,7 +90,7 @@ export function InvoiceForm({
       return;
     }
     
-    if (!customerId) {
+    if (!companyId) {
       toast.error("Please select a customer");
       return;
     }
@@ -97,9 +98,9 @@ export function InvoiceForm({
     setLoading(true);
 
     try {
-      formData.set("customer_id", customerId);
-      if (projectId) formData.set("project_id", projectId);
-      formData.set("tax_percent", taxPercent.toString());
+      formData.set("company_id", companyId);
+      if (contractId) formData.set("contract_id", contractId);
+      formData.set("gst_percent", gstPercent.toString());
       formData.set("discount_amount", discount.toString());
       formData.set("items", JSON.stringify(validItems));
 
@@ -128,15 +129,15 @@ export function InvoiceForm({
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="customer">Customer *</Label>
-              <Select value={customerId} onValueChange={(v) => setCustomerId(v || "")} required>
+              <Label htmlFor="company">Company *</Label>
+              <Select value={companyId} onValueChange={(v) => setCompanyId(v || "")} required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select customer" />
+                  <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
-                  {customers.map((c) => (
+                  {companies.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name} ({c.customer_id})
+                      {c.name} ({c.company_code})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -144,16 +145,16 @@ export function InvoiceForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="project">Linked Project</Label>
-              <Select value={projectId} onValueChange={(v) => setProjectId(v || "")}>
+              <Label htmlFor="contract">Linked Contract</Label>
+              <Select value={contractId} onValueChange={(v) => setContractId(v || "")}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select project (optional)" />
+                  <SelectValue placeholder="Select contract (optional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.project_code} - {p.name}
+                  {contracts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.contract_number} - {c.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -332,7 +333,7 @@ export function InvoiceForm({
             <div className="w-full md:w-64 space-y-3">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatCurrency(subtotal)}</span>
+                <span className="font-medium">{formatCurrency(subtotal)}</span>
               </div>
               
               <div className="flex justify-between items-center text-sm">
@@ -358,20 +359,20 @@ export function InvoiceForm({
                   min="0"
                   max="100"
                   step="0.1"
-                  value={taxPercent}
-                  onChange={(e) => setTaxPercent(parseFloat(e.target.value) || 0)}
+                  value={gstPercent}
+                  onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)}
                   className="w-20 h-7 text-right"
                 />
               </div>
               
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Tax Amount</span>
-                <span>{formatCurrency(taxAmount)}</span>
+                <span>{formatCurrency(gstAmount)}</span>
               </div>
               
               <div className="pt-3 border-t flex justify-between items-center">
                 <span className="font-semibold text-base">Total</span>
-                <span className="font-bold text-lg text-primary">{formatCurrency(total)}</span>
+                <span className="font-bold text-lg text-primary">{formatCurrency(totalAmount)}</span>
               </div>
             </div>
           </div>

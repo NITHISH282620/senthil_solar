@@ -2,11 +2,27 @@ export const APP_NAME = "Sentil Solar Ops";
 export const APP_DESCRIPTION = "Field Operations Management System";
 
 export const ROLES = {
-  ADMIN: "admin",
+  OWNER: "owner",
   MANAGER: "manager",
+  ACCOUNTANT: "accountant",
+  ENGINEER: "engineer",
   SUPERVISOR: "supervisor",
-  EMPLOYEE: "employee",
+  STORE_MANAGER: "store_manager",
+  WORKER: "worker",
+  CLIENT: "client",
 } as const;
+
+/** Assignable roles, ordered by authority. Mirrors the `roles` table. */
+export const ROLE_OPTIONS = [
+  { value: "owner", label: "Owner" },
+  { value: "manager", label: "Manager" },
+  { value: "accountant", label: "Accountant" },
+  { value: "engineer", label: "Site Engineer" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "store_manager", label: "Store Manager" },
+  { value: "worker", label: "Worker" },
+  { value: "client", label: "Client Portal" },
+] as const;
 
 export const EMPLOYEE_TYPES = [
   { value: "daily_wage", label: "Daily Wage" },

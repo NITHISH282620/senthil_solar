@@ -8,14 +8,14 @@ import { checkIn, checkOut } from "@/actions/attendance";
 import type { Attendance } from "@/types/database";
 
 interface CheckInOutButtonProps {
-  todayRecord: Pick<Attendance, "check_in" | "check_out"> | null;
+  todayRecord: Pick<Attendance, "check_in_at" | "check_out_at"> | null;
 }
 
 export function CheckInOutButton({ todayRecord }: CheckInOutButtonProps) {
   const [loading, setLoading] = useState(false);
 
-  const hasCheckedIn = !!todayRecord?.check_in;
-  const hasCheckedOut = !!todayRecord?.check_out;
+  const hasCheckedIn = !!todayRecord?.check_in_at;
+  const hasCheckedOut = !!todayRecord?.check_out_at;
 
   const handleAction = async () => {
     setLoading(true);
@@ -30,7 +30,7 @@ export function CheckInOutButton({ todayRecord }: CheckInOutButtonProps) {
         if (result.error) toast.error(result.error);
         else toast.success("Checked out successfully!");
       }
-    } catch (err) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);

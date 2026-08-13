@@ -47,7 +47,7 @@ export default async function QuotationsPage({ searchParams }: PageProps) {
   ]);
 
   const canCreate =
-    currentUser?.role === "admin" || currentUser?.role === "manager";
+    currentUser?.role === "owner" || currentUser?.role === "manager";
 
   return (
     <div className="space-y-6">
@@ -129,10 +129,10 @@ export default async function QuotationsPage({ searchParams }: PageProps) {
                       className="hover:underline"
                     >
                       <p className="font-medium">{qt.title}</p>
-                      {qt.system_capacity_kw && (
-                        <p className="text-sm text-muted-foreground">
-                          {qt.system_capacity_kw} kW
-                        </p>
+                      {qt.capacity_kw && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {qt.capacity_kw} kW System
+                        </div>
                       )}
                     </Link>
                   </TableCell>
@@ -140,13 +140,13 @@ export default async function QuotationsPage({ searchParams }: PageProps) {
                     {qt.quotation_number}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    {qt.customer?.name ?? "—"}
+                    {qt.company?.name ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell">
                     {formatDate(qt.valid_until)}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(qt.total_amount)}
+                    {formatCurrency(qt.total_amount ?? 0)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={qt.status} />

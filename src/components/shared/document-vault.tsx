@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { 
   UploadCloud, 
   FileIcon, 
@@ -29,7 +29,7 @@ import { uploadDocument, deleteDocument, getSignedUrl, type DocumentWithUploader
 import { formatDate } from "@/lib/format";
 
 interface DocumentVaultProps {
-  entityType: "employee" | "customer" | "project" | "quotation" | "invoice" | "expense" | "general";
+  entityType: "employee" | "company" | "contract" | "quotation" | "invoice" | "expense" | "general";
   entityId?: string;
   initialDocuments?: DocumentWithUploader[];
 }
@@ -125,7 +125,7 @@ export function DocumentVault({ entityType, entityId, initialDocuments = [] }: D
         // since we are using local state for immediate UI feedback if we wanted.
         // The server action calls revalidatePath, so Next.js should refresh the data.
       }
-    } catch (error) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setIsUploading(false);
@@ -147,7 +147,7 @@ export function DocumentVault({ entityType, entityId, initialDocuments = [] }: D
       } else {
         toast.success("Document deleted");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete document");
       setDocuments(initialDocuments);
     }
@@ -158,14 +158,14 @@ export function DocumentVault({ entityType, entityId, initialDocuments = [] }: D
     setPreviewDoc(doc);
     
     try {
-      const result = await getSignedUrl(doc.file_url);
+      const result = await getSignedUrl(doc.file_path);
       if (result.error || !result.data) {
         toast.error(result.error || "Failed to generate preview URL");
         setPreviewDoc(null);
       } else {
         setPreviewUrl(result.data);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to load document");
       setPreviewDoc(null);
     } finally {

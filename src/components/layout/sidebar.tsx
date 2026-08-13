@@ -46,35 +46,35 @@ const navItems: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   {
     title: "Clients",
-    href: "/customers",
+    href: "/companies",
     icon: Building2,
-    roles: ["admin", "manager"],
+    roles: ["owner", "manager"],
   },
   {
     title: "Quotations",
     href: "/quotations",
     icon: FileText,
-    roles: ["admin", "manager"],
+    roles: ["owner", "manager"],
   },
-  { title: "Projects", href: "/projects", icon: Briefcase },
+  { title: "Contracts", href: "/contracts", icon: Briefcase },
   { title: "Attendance", href: "/attendance", icon: CalendarCheck },
   { title: "Expenses", href: "/expenses", icon: Receipt },
   {
     title: "Billing",
     href: "/billing",
     icon: IndianRupee,
-    roles: ["admin", "manager"],
+    roles: ["owner", "manager"],
   },
   {
     title: "Employees",
     href: "/employees",
     icon: Users,
-    roles: ["admin", "manager"],
+    roles: ["owner", "manager"],
   },
 ];
 
 const bottomItems: NavItem[] = [
-  { title: "Settings", href: "/settings", icon: Settings, roles: ["admin"] },
+  { title: "Settings", href: "/settings", icon: Settings, roles: ["owner"] },
 ];
 
 export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarProps) {

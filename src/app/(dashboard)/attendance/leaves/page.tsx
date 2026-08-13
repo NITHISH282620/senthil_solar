@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getLeaveRequests } from "@/actions/attendance";
@@ -19,7 +19,7 @@ interface PageProps {
 export default async function LeavesPage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const currentUser = await getCurrentUser();
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "manager";
+  const isAdmin = currentUser?.role === "owner" || currentUser?.role === "manager";
   
   const statusFilter = typeof resolvedParams.status === "string" ? resolvedParams.status : "all";
 
@@ -70,7 +70,7 @@ export default async function LeavesPage({ searchParams }: PageProps) {
                       <td className="px-4 py-3 font-medium">
                         <div className="flex flex-col">
                           <span>{leave.employee?.full_name}</span>
-                          <span className="text-xs text-muted-foreground">{leave.employee?.employee_id}</span>
+                          <span className="text-xs text-muted-foreground">{leave.employee?.employee_code}</span>
                         </div>
                       </td>
                     )}

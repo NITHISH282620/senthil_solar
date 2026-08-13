@@ -25,7 +25,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { getEmployees } from "@/actions/employees";
 import { getCurrentUser } from "@/actions/auth";
 import { formatDate } from "@/lib/format";
-import { DEPARTMENTS } from "@/lib/constants";
+import { DEPARTMENTS, ROLE_OPTIONS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 
@@ -49,7 +49,7 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
     getCurrentUser(),
   ]);
 
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === "owner";
 
   return (
     <div className="space-y-6">
@@ -80,9 +80,11 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Roles</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-              <SelectItem value="manager">Manager</SelectItem>
-              <SelectItem value="employee">Employee</SelectItem>
+              {ROLE_OPTIONS.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select name="department" defaultValue={params.department ?? ""}>
@@ -163,7 +165,7 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
                       </Link>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell font-mono text-sm">
-                      {emp.employee_id}
+                      {emp.employee_code}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {emp.department ?? "—"}

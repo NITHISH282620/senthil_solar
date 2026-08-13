@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { getAttendance } from "@/actions/attendance";
 import { getCurrentUser } from "@/actions/auth";
 import { formatDate } from "@/lib/format";
-import { Clock, Calendar, CheckCircle2, XCircle } from "lucide-react";
+import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -18,7 +18,7 @@ interface PageProps {
 export default async function AttendancePage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const currentUser = await getCurrentUser();
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "manager";
+  const isAdmin = currentUser?.role === "owner" || currentUser?.role === "manager";
   
   if (!isAdmin) {
     return (
@@ -110,25 +110,27 @@ export default async function AttendancePage({ searchParams }: PageProps) {
                     <td className="px-4 py-3 font-medium">
                       <div className="flex flex-col">
                         <span>{record.employee?.full_name}</span>
-                        <span className="text-xs text-muted-foreground">{record.employee?.employee_id}</span>
+                        <span className="text-xs text-muted-foreground">{record.employee?.employee_code}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={record.status} />
                     </td>
                     <td className="px-4 py-3">
-                      {record.check_in ? (
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                          {formatDate(record.check_in, "HH:mm")}
+                      {record.check_in_at ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-emerald-600">
+                            {formatDate(record.check_in_at, "HH:mm")}
+                          </span>
                         </div>
                       ) : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      {record.check_out ? (
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                          {formatDate(record.check_out, "HH:mm")}
+                      {record.check_out_at ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-amber-600">
+                            {formatDate(record.check_out_at, "HH:mm")}
+                          </span>
                         </div>
                       ) : "—"}
                     </td>

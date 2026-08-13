@@ -57,15 +57,12 @@ export default async function PrintInvoicePage({ params }: PageProps) {
         <div className="flex justify-between mb-12">
           <div className="w-1/2">
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Bill To</h3>
-            <p className="font-bold text-gray-900">{invoice.customer?.name}</p>
-            {invoice.customer?.address && (
+            <p className="font-bold text-gray-900">{invoice.company?.name}</p>
+            {invoice.company?.billing_address && (
               <p className="text-gray-600 text-sm mt-1">
-                {invoice.customer.address}
-                {invoice.customer.city && <>, {invoice.customer.city}</>}
+                <span>{invoice.company.billing_address}</span>
+                {invoice.company.city && <>, {invoice.company.city}</>}
               </p>
-            )}
-            {invoice.customer?.phone && (
-              <p className="text-gray-600 text-sm mt-1">{invoice.customer.phone}</p>
             )}
           </div>
           
@@ -78,10 +75,10 @@ export default async function PrintInvoicePage({ params }: PageProps) {
               <span className="text-gray-500">Due Date:</span>
               <span className="font-medium text-gray-900">{invoice.due_date ? formatDate(invoice.due_date) : "On Receipt"}</span>
             </div>
-            {invoice.project && (
+            {invoice.contract && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Project:</span>
-                <span className="font-medium text-gray-900">{invoice.project.project_code}</span>
+                <span className="text-gray-500">Contract:</span>
+                <span className="font-medium text-gray-900">{invoice.contract.contract_number}</span>
               </div>
             )}
           </div>
@@ -103,7 +100,7 @@ export default async function PrintInvoicePage({ params }: PageProps) {
                 <td className="py-4 text-gray-800">{item.description}</td>
                 <td className="py-4 text-right text-gray-600">{item.quantity} {item.unit}</td>
                 <td className="py-4 text-right text-gray-600">{formatCurrency(item.unit_price)}</td>
-                <td className="py-4 text-right font-medium text-gray-900">{formatCurrency(item.total_price)}</td>
+                <td className="py-4 text-right font-medium text-gray-900">{formatCurrency(item.line_total ?? 0)}</td>
               </tr>
             ))}
           </tbody>
@@ -112,51 +109,55 @@ export default async function PrintInvoicePage({ params }: PageProps) {
         {/* Totals */}
         <div className="flex justify-between mb-12">
           <div className="w-1/2">
-            {(settings?.bank_name || settings?.bank_account_no) && (
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="text-sm font-bold text-gray-900 mb-2">Payment Details</h3>
-                <div className="text-sm text-gray-600">
-                  <p><span className="font-medium">Bank:</span> {settings.bank_name}</p>
-                  <p><span className="font-medium">Account No:</span> {settings.bank_account_no}</p>
-                  <p><span className="font-medium">IFSC:</span> {settings.bank_ifsc}</p>
-                </div>
-              </div>
-            )}
           </div>
           
           <div className="w-1/3">
             <div className="flex justify-between py-2 text-sm">
               <span className="text-gray-600">Subtotal</span>
-              <span className="font-medium text-gray-900">{formatCurrency(invoice.subtotal)}</span>
+              <span className="font-medium text-gray-900">{formatCurrency(invoice.subtotal ?? 0)}</span>
             </div>
             
-            {invoice.discount_amount > 0 && (
+            {invoice.discount_amount && invoice.discount_amount > 0 ? (
               <div className="flex justify-between py-2 text-sm">
                 <span className="text-gray-600">Discount</span>
                 <span className="font-medium text-gray-900">-{formatCurrency(invoice.discount_amount)}</span>
               </div>
+            ) : null}
+            
+            {invoice.cgst_amount > 0 && (
+              <div className="flex justify-between py-2 text-sm">
+                <span className="text-gray-600">CGST</span>
+                <span className="font-medium text-gray-900">{formatCurrency(invoice.cgst_amount)}</span>
+              </div>
             )}
-            
-            <div className="flex justify-between py-2 text-sm">
-              <span className="text-gray-600">Tax ({invoice.tax_percent}%)</span>
-              <span className="font-medium text-gray-900">{formatCurrency(invoice.tax_amount)}</span>
-            </div>
-            
-            <div className="flex justify-between py-3 border-t-2 border-gray-900 mt-2">
-              <span className="font-bold text-gray-900">Total</span>
-              <span className="font-bold text-gray-900">{formatCurrency(invoice.total_amount)}</span>
-            </div>
-            
-            {invoice.amount_paid > 0 && (
-              <div className="flex justify-between py-2 text-sm text-gray-600">
-                <span>Amount Paid</span>
-                <span>-{formatCurrency(invoice.amount_paid)}</span>
+            {invoice.sgst_amount > 0 && (
+              <div className="flex justify-between py-2 text-sm">
+                <span className="text-gray-600">SGST</span>
+                <span className="font-medium text-gray-900">{formatCurrency(invoice.sgst_amount)}</span>
+              </div>
+            )}
+            {invoice.igst_amount > 0 && (
+              <div className="flex justify-between py-2 text-sm">
+                <span className="text-gray-600">IGST</span>
+                <span className="font-medium text-gray-900">{formatCurrency(invoice.igst_amount)}</span>
               </div>
             )}
             
+            <div className="flex justify-between py-3 border-t-2 border-gray-900 mt-2">
+              <span className="font-bold text-gray-900">Total</span>
+              <span className="font-bold text-gray-900">{formatCurrency(invoice.total_amount ?? 0)}</span>
+            </div>
+            
+            {invoice.amount_received && invoice.amount_received > 0 ? (
+              <div className="flex justify-between py-2 text-sm text-gray-600">
+                <span>Amount Received</span>
+                <span>-{formatCurrency(invoice.amount_received)}</span>
+              </div>
+            ) : null}
+            
             <div className="flex justify-between py-3 bg-gray-50 mt-2 px-2">
               <span className="font-bold text-gray-900">Balance Due</span>
-              <span className="font-bold text-gray-900">{formatCurrency(invoice.balance_due)}</span>
+              <span className="font-bold text-gray-900">{formatCurrency(invoice.balance_due ?? 0)}</span>
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,74 +17,33 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { createExpense } from "@/actions/expenses";
-import { formatCurrency } from "@/lib/format";
-
-interface ExpenseItemInput {
-  id: string;
-  description: string;
-  amount: number;
-}
 
 interface ExpenseFormProps {
-  projects?: { id: string; project_code: string; name: string }[];
+  contracts?: { id: string; contract_number: string; title: string }[];
 }
 
-export function ExpenseForm({ projects = [] }: ExpenseFormProps) {
+export function ExpenseForm({ contracts = [] }: ExpenseFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("materials");
-  const [projectId, setProjectId] = useState("");
-  
-  const [items, setItems] = useState<ExpenseItemInput[]>([
-    { id: crypto.randomUUID(), description: "", amount: 0 },
-  ]);
-
-  const totalAmount = items.reduce((acc, item) => acc + (item.amount || 0), 0);
-
-  const addItem = () => {
-    setItems([...items, { id: crypto.randomUUID(), description: "", amount: 0 }]);
-  };
-
-  const removeItem = (id: string) => {
-    if (items.length > 1) {
-      setItems(items.filter((item) => item.id !== id));
-    }
-  };
-
-  const updateItem = (id: string, field: keyof ExpenseItemInput, value: string | number) => {
-    setItems(
-      items.map((item) => {
-        if (item.id === id) {
-          return { ...item, [field]: value };
-        }
-        return item;
-      })
-    );
-  };
+  const [contractId, setContractId] = useState("");
 
   async function handleSubmit(formData: FormData) {
-    const validItems = items.filter((item) => item.description.trim() !== "" && item.amount > 0);
-    if (validItems.length === 0) {
-      toast.error("Please add at least one valid expense item");
-      return;
-    }
-
     setLoading(true);
 
     try {
       formData.set("category", category);
-      if (projectId && projectId !== "none") {
-        formData.set("project_id", projectId);
+      if (contractId && contractId !== "none") {
+        formData.set("contract_id", contractId);
       }
-      formData.set("items", JSON.stringify(validItems));
 
       const result = await createExpense(formData);
 
-      if (result.error || !result.data) {
-        toast.error(result.error ?? "Could not submit expense.");
+      if (result.error) {
+        toast.error(result.error);
       } else {
         toast.success("Expense submitted successfully");
-        router.push(`/expenses/${result.data.id}`);
+        router.push(`/expenses`);
         router.refresh();
       }
     } catch {
@@ -109,12 +68,13 @@ export function ExpenseForm({ projects = [] }: ExpenseFormProps) {
                 name="title"
                 placeholder="e.g. Cables and connectors for Site A"
                 required
+                disabled={loading}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="category">Category *</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v || "materials")}>
+              <Select value={category} onValueChange={(v) => setCategory(v || "materials")} disabled={loading}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -129,16 +89,29 @@ export function ExpenseForm({ projects = [] }: ExpenseFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="project">Link to Project (Optional)</Label>
-              <Select value={projectId} onValueChange={(v) => setProjectId(v || "")}>
+              <Label htmlFor="amount">Amount (₹) *</Label>
+              <Input
+                id="amount"
+                name="amount"
+                type="number"
+                step="0.01"
+                min={0}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contract_id">Link to Contract (Optional)</Label>
+              <Select value={contractId} onValueChange={(v) => setContractId(v || "")} disabled={loading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select project" />
+                  <SelectValue placeholder="Select contract" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.project_code} - {p.name}
+                  {contracts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.contract_number} - {c.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -150,83 +123,33 @@ export function ExpenseForm({ projects = [] }: ExpenseFormProps) {
               <Textarea
                 id="description"
                 name="description"
-                placeholder="Additional details about the expense..."
+                placeholder="Additional details..."
                 rows={3}
+                disabled={loading}
               />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Items</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
-            {items.map((item, index) => (
-              <div key={item.id} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                <div className="flex-1 w-full space-y-1">
-                  {index === 0 && <Label className="hidden sm:block text-xs text-muted-foreground">Description</Label>}
-                  <Input
-                    placeholder="Item description"
-                    value={item.description}
-                    onChange={(e) => updateItem(item.id, "description", e.target.value)}
-                    required
-                  />
-                </div>
-                
-                <div className="w-full sm:w-32 space-y-1">
-                  {index === 0 && <Label className="hidden sm:block text-xs text-muted-foreground">Amount</Label>}
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Amount"
-                    value={item.amount || ""}
-                    onChange={(e) => updateItem(item.id, "amount", parseFloat(e.target.value) || 0)}
-                    className="text-right"
-                    required
-                  />
-                </div>
-                
-                <div className={`pt-2 sm:pt-0 ${index === 0 ? 'sm:mt-5' : ''}`}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeItem(item.id)}
-                    disabled={items.length === 1}
-                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-between border-t pt-4">
-            <Button type="button" variant="outline" size="sm" onClick={addItem}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Item
-            </Button>
-            
-            <div className="flex items-center gap-4 text-right">
-              <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-              <span className="text-lg font-bold">{formatCurrency(totalAmount)}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-end gap-4">
-        <Button type="button" variant="outline" onClick={() => router.back()} disabled={loading}>
+      <div className="flex justify-end gap-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => router.back()}
+          disabled={loading}
+        >
           Cancel
         </Button>
         <Button type="submit" disabled={loading}>
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Submit Expense
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            "Submit Expense"
+          )}
         </Button>
       </div>
     </form>

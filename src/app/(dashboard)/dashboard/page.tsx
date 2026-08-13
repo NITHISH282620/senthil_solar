@@ -8,11 +8,10 @@ import {
   Clock,
   TrendingUp,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/shared/stat-card";
 import { getCurrentUser } from "@/actions/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatCurrency } from "@/lib/format";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -27,7 +26,7 @@ export default async function DashboardPage() {
 
   // Fetch counts based on role
   const isAdminOrManager =
-    user.role === "admin" || user.role === "manager";
+    user.role === "owner" || user.role === "manager";
 
   // Employee count (admin/manager only)
   let employeeCount = 0;

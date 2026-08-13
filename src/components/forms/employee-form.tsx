@@ -19,7 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createEmployee, updateEmployee } from "@/actions/employees";
-import { DEPARTMENTS } from "@/lib/constants";
+import { ROLE_OPTIONS } from "@/lib/constants";
 import type { Profile } from "@/types/database";
 
 interface EmployeeFormProps {
@@ -134,9 +134,11 @@ export function EmployeeForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="employee">Employee</SelectItem>
+                  {ROLE_OPTIONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

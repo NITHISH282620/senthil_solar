@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, UserRoundSearch } from "lucide-react";
+import { Plus, Building2 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,45 +21,43 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
-import { getCustomers } from "@/actions/customers";
+import { getCompanies } from "@/actions/companies";
 import { getCurrentUser } from "@/actions/auth";
 import { formatPhone } from "@/lib/format";
-import { CUSTOMER_SOURCES, CUSTOMER_STATUSES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Customers",
+  title: "Companies",
 };
 
 interface PageProps {
   searchParams: Promise<{
     search?: string;
     status?: string;
-    source?: string;
   }>;
 }
 
-export default async function CustomersPage({ searchParams }: PageProps) {
+export default async function CompaniesPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const [{ data: customers }, currentUser] = await Promise.all([
-    getCustomers(params),
+  const [{ data: companies }, currentUser] = await Promise.all([
+    getCompanies(params),
     getCurrentUser(),
   ]);
 
   const canCreate =
-    currentUser?.role === "admin" || currentUser?.role === "manager";
+    currentUser?.role === "owner" || currentUser?.role === "manager";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Customers"
-        description="Manage your customers and prospects"
+        title="Companies"
+        description="Manage your client companies and commercial partners"
       >
         {canCreate && (
-          <Link href="/customers/new" className={cn(buttonVariants())}>
+          <Link href="/companies/new" className={cn(buttonVariants())}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Customer
+            Add Company
           </Link>
         )}
       </PageHeader>
@@ -69,7 +67,7 @@ export default async function CustomersPage({ searchParams }: PageProps) {
         <form className="flex-1 flex flex-wrap gap-3">
           <Input
             name="search"
-            placeholder="Search by name, phone, email, city..."
+            placeholder="Search by name, code, city..."
             defaultValue={params.search ?? ""}
             className="max-w-sm"
           />
@@ -79,24 +77,10 @@ export default async function CustomersPage({ searchParams }: PageProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              {CUSTOMER_STATUSES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select name="source" defaultValue={params.source ?? ""}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="All Sources" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              {CUSTOMER_SOURCES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                </SelectItem>
-              ))}
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="prospect">Prospect</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="blacklisted">Blacklisted</SelectItem>
             </SelectContent>
           </Select>
           <Button type="submit" variant="secondary">
@@ -106,16 +90,16 @@ export default async function CustomersPage({ searchParams }: PageProps) {
       </div>
 
       {/* Table */}
-      {!customers || customers.length === 0 ? (
+      {!companies || companies.length === 0 ? (
         <EmptyState
-          icon={UserRoundSearch}
-          title="No customers found"
-          description="Start by adding your first customer."
+          icon={Building2}
+          title="No companies found"
+          description="Start by adding your first client company."
         >
           {canCreate && (
-            <Link href="/customers/new" className={cn(buttonVariants())}>
+            <Link href="/companies/new" className={cn(buttonVariants())}>
               <Plus className="mr-2 h-4 w-4" />
-              Add Customer
+              Add Company
             </Link>
           )}
         </EmptyState>
@@ -124,46 +108,53 @@ export default async function CustomersPage({ searchParams }: PageProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead className="hidden sm:table-cell">ID</TableHead>
-                <TableHead className="hidden md:table-cell">Phone</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead className="hidden sm:table-cell">Code</TableHead>
+                <TableHead className="hidden md:table-cell">Primary Contact</TableHead>
                 <TableHead className="hidden md:table-cell">City</TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  Assigned To
-                </TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {customers.map((cust) => (
-                <TableRow key={cust.id}>
+              {companies.map((comp) => (
+                <TableRow key={comp.id}>
                   <TableCell>
                     <Link
-                      href={`/customers/${cust.id}`}
+                      href={`/companies/${comp.id}`}
                       className="hover:underline"
                     >
-                      <p className="font-medium">{cust.name}</p>
-                      {cust.email && (
-                        <p className="text-sm text-muted-foreground">
-                          {cust.email}
+                      <p className="font-medium">{comp.name}</p>
+                      {comp.company_type && (
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {comp.company_type}
                         </p>
                       )}
                     </Link>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell font-mono text-sm">
-                    {cust.customer_id}
+                    {comp.company_code}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    {formatPhone(cust.phone)}
+                    {comp.primary_contact ? (
+                      <div>
+                        <p className="text-sm font-medium">
+                          {comp.primary_contact.name}
+                        </p>
+                        {comp.primary_contact.phone && (
+                          <p className="text-xs text-muted-foreground">
+                            {formatPhone(comp.primary_contact.phone)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    {cust.city ?? "—"}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    {cust.assigned_profile?.full_name ?? "—"}
+                    {comp.city ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={cust.status} />
+                    <StatusBadge status={comp.status} />
                   </TableCell>
                 </TableRow>
               ))}

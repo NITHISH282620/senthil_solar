@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/actions/auth";
-import { getQuotation, getCustomersForDropdown } from "@/actions/quotations";
+import { getQuotation, getCompaniesForDropdown } from "@/actions/quotations";
 import { QuotationForm } from "@/components/forms/quotation-form";
 import { PageHeader } from "@/components/shared/page-header";
 import type { Metadata } from "next";
@@ -15,18 +15,18 @@ export const metadata: Metadata = {
 
 export default async function EditQuotationPage({ params }: PageProps) {
   const { id } = await params;
-  const [{ data: quotation }, currentUser, { data: customers }] =
+  const [{ data: quotation }, currentUser, { data: companies }] =
     await Promise.all([
       getQuotation(id),
       getCurrentUser(),
-      getCustomersForDropdown(),
+      getCompaniesForDropdown(),
     ]);
 
   if (!quotation) {
     notFound();
   }
 
-  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
     redirect("/dashboard");
   }
 
@@ -41,7 +41,7 @@ export default async function EditQuotationPage({ params }: PageProps) {
         title="Edit Quotation"
         description={`Editing ${quotation.quotation_number}`}
       />
-      <QuotationForm quotation={quotation} customers={customers ?? []} />
+      <QuotationForm quotation={quotation} companies={companies ?? []} />
     </div>
   );
 }

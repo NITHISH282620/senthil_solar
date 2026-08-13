@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { InvoiceForm } from "@/components/forms/invoice-form";
-import { getCustomersForDropdown } from "@/actions/quotations";
-import { getProjects } from "@/actions/projects";
+import { getCompaniesForDropdown } from "@/actions/quotations";
+import { getContracts } from "@/actions/contracts";
 import { getCompanySettings } from "@/actions/settings";
 import type { Metadata } from "next";
 
@@ -15,18 +15,18 @@ interface PageProps {
 
 export default async function NewInvoicePage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
-  const projectId =
-    typeof resolvedParams.projectId === "string"
-      ? resolvedParams.projectId
+  const contractId =
+    typeof resolvedParams.contractId === "string"
+      ? resolvedParams.contractId
       : undefined;
-  const customerId =
-    typeof resolvedParams.customerId === "string"
-      ? resolvedParams.customerId
+  const companyId =
+    typeof resolvedParams.companyId === "string"
+      ? resolvedParams.companyId
       : undefined;
 
-  const [customersRes, projectsRes, settingsRes] = await Promise.all([
-    getCustomersForDropdown(),
-    getProjects(),
+  const [companiesRes, contractsRes, settingsRes] = await Promise.all([
+    getCompaniesForDropdown(),
+    getContracts(),
     getCompanySettings(),
   ]);
 
@@ -38,15 +38,15 @@ export default async function NewInvoicePage({ searchParams }: PageProps) {
       />
       <div className="max-w-4xl">
         <InvoiceForm
-          customers={customersRes.data ?? []}
-          projects={(projectsRes.data ?? []).map((p) => ({
-            id: p.id,
-            project_code: p.project_code,
-            name: p.name,
+          companies={companiesRes.data ?? []}
+          contracts={(contractsRes.data ?? []).map((c) => ({
+            id: c.id,
+            contract_number: c.contract_number,
+            title: c.title,
           }))}
-          defaultTaxRate={settingsRes.data?.tax_rate ?? 18}
-          prefilledProjectId={projectId}
-          prefilledCustomerId={customerId}
+          defaultGstRate={settingsRes.data?.default_gst_percent ?? 18}
+          prefilledContractId={contractId}
+          prefilledCompanyId={companyId}
         />
       </div>
     </div>

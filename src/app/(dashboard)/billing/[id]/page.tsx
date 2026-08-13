@@ -4,7 +4,6 @@ import { Printer, MapPin, Building, FileText, CheckCircle2 } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PaymentModalWrapper } from "@/components/shared/payment-modal-wrapper";
 import { DocumentVault } from "@/components/shared/document-vault";
@@ -45,7 +44,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const canEdit = currentUser?.role === "admin" || currentUser?.role === "manager";
+  const canEdit = currentUser?.role === "owner" || currentUser?.role === "manager";
   const isPaid = invoice.status === "paid";
 
   return (
@@ -65,7 +64,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
         
         <div className="flex gap-2">
           {canEdit && !isPaid && (
-            <PaymentModalWrapper invoiceId={invoice.id} balanceDue={invoice.balance_due} />
+            <PaymentModalWrapper invoiceId={invoice.id} balanceDue={invoice.balance_due ?? 0} />
           )}
           
           <Link
@@ -110,7 +109,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
                         </td>
                         <td className="px-2 py-3 text-right">{formatCurrency(item.unit_price)}</td>
                         <td className="px-2 py-3 text-right font-medium">
-                          {formatCurrency(item.total_price)}
+                          {formatCurrency(item.line_total ?? 0)}
                         </td>
                       </tr>
                     ))}
@@ -127,26 +126,40 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
                   {invoice.discount_amount > 0 && (
                     <div className="flex justify-between text-muted-foreground">
                       <span>Discount</span>
-                      <span>-{formatCurrency(invoice.discount_amount)}</span>
+                      <span>-{formatCurrency(invoice.discount_amount ?? 0)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Tax ({invoice.tax_percent}%)</span>
-                    <span>{formatCurrency(invoice.tax_amount)}</span>
-                  </div>
+                  {invoice.cgst_amount > 0 && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>CGST</span>
+                      <span>{formatCurrency(invoice.cgst_amount)}</span>
+                    </div>
+                  )}
+                  {invoice.sgst_amount > 0 && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>SGST</span>
+                      <span>{formatCurrency(invoice.sgst_amount)}</span>
+                    </div>
+                  )}
+                  {invoice.igst_amount > 0 && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>IGST</span>
+                      <span>{formatCurrency(invoice.igst_amount)}</span>
+                    </div>
+                  )}
                   <Separator />
                   <div className="flex justify-between font-semibold text-base">
                     <span>Total</span>
-                    <span>{formatCurrency(invoice.total_amount)}</span>
+                    <span>{formatCurrency(invoice.total_amount ?? 0)}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Amount Paid</span>
-                    <span>{formatCurrency(invoice.amount_paid)}</span>
+                    <span>Amount Received</span>
+                    <span>{formatCurrency(invoice.amount_received ?? 0)}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between font-bold text-lg text-primary">
                     <span>Balance Due</span>
-                    <span>{formatCurrency(invoice.balance_due)}</span>
+                    <span>{formatCurrency(invoice.balance_due ?? 0)}</span>
                   </div>
                 </div>
               </div>
@@ -210,26 +223,17 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <div className="font-medium text-lg">{invoice.customer?.name}</div>
-                {invoice.customer?.address && (
+                <div className="font-medium text-lg">{invoice.company?.name}</div>
+                {invoice.company?.billing_address && (
                   <div className="text-sm text-muted-foreground flex items-start gap-2">
                     <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
                     <span>
-                      {invoice.customer.address}
-                      {invoice.customer.city && <>, {invoice.customer.city}</>}
+                      {invoice.company.billing_address}
+                      {invoice.company.city && <>, {invoice.company.city}</>}
                     </span>
                   </div>
                 )}
-                {invoice.customer?.phone && (
-                  <div className="text-sm text-muted-foreground">
-                    Phone: {invoice.customer.phone}
-                  </div>
-                )}
-                {invoice.customer?.email && (
-                  <div className="text-sm text-muted-foreground">
-                    Email: {invoice.customer.email}
-                  </div>
-                )}
+                {/* Email and Phone would come from a contact person in a real implementation */}
               </div>
             </CardContent>
           </Card>
@@ -256,21 +260,12 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
                     GSTIN: {settings.gst_number}
                   </div>
                 )}
-                {(settings?.bank_name || settings?.bank_account_no) && (
-                  <div className="mt-4 pt-4 border-t">
-                    <div className="text-xs font-semibold mb-1">Bank Details</div>
-                    <div className="text-sm text-muted-foreground">
-                      {settings.bank_name}<br />
-                      A/C: {settings.bank_account_no}<br />
-                      IFSC: {settings.bank_ifsc}
-                    </div>
-                  </div>
-                )}
+
               </div>
             </CardContent>
           </Card>
 
-          {(invoice.project || invoice.quotation) && (
+          {invoice.contract && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -278,22 +273,12 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                {invoice.project && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Project</span>
-                    <Link href={`/projects/${invoice.project.id}`} className="font-medium text-primary hover:underline">
-                      {invoice.project.project_code}
-                    </Link>
-                  </div>
-                )}
-                {invoice.quotation && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Quotation</span>
-                    <Link href={`/quotations/${invoice.quotation.id}`} className="font-medium text-primary hover:underline">
-                      {invoice.quotation.quotation_number}
-                    </Link>
-                  </div>
-                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Contract</span>
+                  <Link href={`/contracts/${invoice.contract.id}`} className="font-medium text-primary hover:underline">
+                    {invoice.contract.contract_number}
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           )}

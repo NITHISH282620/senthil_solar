@@ -10,20 +10,20 @@ import {
   sanitizeSearchInput,
 } from "@/lib/validations";
 import { z } from "zod";
-import type { Quotation, QuotationItem, Customer } from "@/types/database";
+import type { Quotation, QuotationItem, Company } from "@/types/database";
 
 export interface QuotationWithRelations extends Quotation {
-  customer?: Pick<Customer, "id" | "name" | "customer_id"> | null;
+  company?: Pick<Company, "id" | "name" | "company_code"> | null;
   quotation_items?: QuotationItem[];
 }
 
 /**
- * Fetch all quotations with customer name
+ * Fetch all quotations with company name
  */
 export async function getQuotations(params?: {
   search?: string;
   status?: string;
-  customer_id?: string;
+  company_id?: string;
 }): Promise<{
   data: QuotationWithRelations[] | null;
   error: string | null;
@@ -32,7 +32,7 @@ export async function getQuotations(params?: {
 
   let query = supabase
     .from("quotations")
-    .select("*, customer:customers!quotations_customer_id_fkey(id, name, customer_id)")
+    .select("*, company:companies!quotations_company_id_fkey(id, name, company_code)")
     .order("created_at", { ascending: false });
 
   if (params?.search) {
@@ -48,8 +48,8 @@ export async function getQuotations(params?: {
     query = query.eq("status", params.status);
   }
 
-  if (params?.customer_id) {
-    query = query.eq("customer_id", params.customer_id);
+  if (params?.company_id) {
+    query = query.eq("company_id", params.company_id);
   }
 
   const { data, error } = await query;
@@ -71,7 +71,7 @@ export async function getQuotation(
 
   const { data: quotation, error } = await supabase
     .from("quotations")
-    .select("*, customer:customers!quotations_customer_id_fkey(id, name, customer_id)")
+    .select("*, company:companies!quotations_company_id_fkey(id, name, company_code)")
     .eq("id", id)
     .single();
 
@@ -99,10 +99,10 @@ export async function getQuotation(
  */
 export async function createQuotation(
   quotationData: Record<string, unknown>,
-  items: { description: string; unit: string; quantity: number; unit_price: number; total_price: number; sort_order: number }[]
+  items: { description: string; unit: string; quantity: number; unit_price: number; line_total: number; sort_order: number }[]
 ) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
     return { data: null, error: "Unauthorized." };
   }
 
@@ -123,8 +123,8 @@ export async function createQuotation(
 
   // Generate quotation number using database sequence
   const { data: seqData, error: seqError } = await supabase.rpc(
-    "next_sequence",
-    { seq_name: "quotation", prefix: "QT" }
+    "next_document_number",
+    { p_doc_type: "quotation", p_prefix: "QT" }
   );
 
   const quotation_number = seqError
@@ -176,10 +176,10 @@ export async function createQuotation(
 export async function updateQuotation(
   id: string,
   quotationData: Record<string, unknown>,
-  items: { description: string; unit: string; quantity: number; unit_price: number; total_price: number; sort_order: number }[]
+  items: { description: string; unit: string; quantity: number; unit_price: number; line_total: number; sort_order: number }[]
 ) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
     return { error: "Unauthorized." };
   }
 
@@ -246,7 +246,7 @@ export async function updateQuotationStatus(
   }
 
   // Only admin can approve
-  if (parsed.data.status === "approved" && currentUser.role !== "admin") {
+  if (parsed.data.status === "approved" && currentUser.role !== "owner") {
     return { error: "Only admins can approve quotations." };
   }
 
@@ -276,23 +276,23 @@ export async function updateQuotationStatus(
 }
 
 /**
- * Get all customers for dropdown
+ * Get all client companies for dropdown
  */
-export async function getCustomersForDropdown(): Promise<{
-  data: { id: string; name: string; customer_id: string }[] | null;
+export async function getCompaniesForDropdown(): Promise<{
+  data: { id: string; name: string; company_code: string }[] | null;
   error: string | null;
 }> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("customers")
-    .select("id, name, customer_id")
-    .eq("status", "active")
+    .from("companies")
+    .select("id, name, company_code")
+    .is("deleted_at", null)
     .order("name");
 
   if (error) return { data: null, error: error.message };
   return {
-    data: data as { id: string; name: string; customer_id: string }[],
+    data: data as { id: string; name: string; company_code: string }[],
     error: null,
   };
 }

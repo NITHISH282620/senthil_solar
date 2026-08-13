@@ -18,7 +18,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { submitLeaveRequest } from "@/actions/attendance";
@@ -42,7 +41,7 @@ export function NewLeaveModal() {
         toast.success("Leave request submitted");
         setOpen(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);

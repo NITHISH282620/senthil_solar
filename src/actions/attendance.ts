@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
 import {
-  attendanceSchema,
   leaveRequestSchema,
   leaveStatusSchema,
   parseFormData,
@@ -12,11 +11,11 @@ import {
 import type { Attendance, LeaveRequest, Profile } from "@/types/database";
 
 export interface AttendanceWithProfile extends Attendance {
-  employee?: Pick<Profile, "full_name" | "employee_id"> | null;
+  employee?: Pick<Profile, "full_name" | "employee_code"> | null;
 }
 
 export interface LeaveRequestWithProfile extends LeaveRequest {
-  employee?: Pick<Profile, "full_name" | "employee_id"> | null;
+  employee?: Pick<Profile, "full_name" | "employee_code"> | null;
 }
 
 // ─── Attendance ─────────────────────────────────────────────────────────────
@@ -38,11 +37,11 @@ export async function getAttendance(params?: {
     .from("attendance")
     .select(`
       *,
-      employee:profiles!attendance_employee_id_fkey(full_name, employee_id)
+      employee:profiles!attendance_employee_id_fkey(full_name, employee_code)
     `)
     .order("date", { ascending: false });
 
-  if (currentUser.role === "employee") {
+  if (currentUser.role === "worker") {
     query = query.eq("employee_id", currentUser.id);
   } else if (params?.employee_id) {
     query = query.eq("employee_id", params.employee_id);
@@ -130,7 +129,7 @@ export async function checkOut() {
 
 export async function updateAttendanceStatus(id: string, status: string, notes?: string) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
     return { error: "Unauthorized." };
   }
 
@@ -167,11 +166,11 @@ export async function getLeaveRequests(params?: {
     .from("leave_requests")
     .select(`
       *,
-      employee:profiles!leave_requests_employee_id_fkey(full_name, employee_id)
+      employee:profiles!leave_requests_employee_id_fkey(full_name, employee_code)
     `)
     .order("created_at", { ascending: false });
 
-  if (currentUser.role === "employee") {
+  if (currentUser.role === "worker") {
     query = query.eq("employee_id", currentUser.id);
   } else if (params?.employee_id) {
     query = query.eq("employee_id", params.employee_id);
@@ -211,7 +210,7 @@ export async function submitLeaveRequest(formData: FormData) {
 
 export async function updateLeaveStatus(id: string, formData: FormData) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
     return { error: "Unauthorized." };
   }
 

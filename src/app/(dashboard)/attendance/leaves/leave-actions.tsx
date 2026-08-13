@@ -18,7 +18,7 @@ export function LeaveRequestActions({ leaveId }: { leaveId: string }) {
       const result = await updateLeaveStatus(leaveId, formData);
       if (result.error) toast.error(result.error);
       else toast.success(`Leave request ${status}`);
-    } catch (error) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(null);

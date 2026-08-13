@@ -44,7 +44,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
     getInvoices({ search, status }),
   ]);
 
-  const canCreate = currentUser?.role === "admin" || currentUser?.role === "manager";
+  const canCreate = currentUser?.role === "owner" || currentUser?.role === "manager";
 
   return (
     <div className="space-y-6">
@@ -125,10 +125,10 @@ export default async function BillingPage({ searchParams }: PageProps) {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    {invoice.customer?.name}
-                    {invoice.customer?.customer_id && (
+                    {invoice.company?.name}
+                    {invoice.company?.company_code && (
                       <div className="text-xs text-muted-foreground">
-                        {invoice.customer.customer_id}
+                        {invoice.company.company_code}
                       </div>
                     )}
                   </TableCell>
@@ -141,10 +141,10 @@ export default async function BillingPage({ searchParams }: PageProps) {
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(invoice.total_amount)}
+                    {formatCurrency(invoice.total_amount ?? 0)}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
-                    {formatCurrency(invoice.balance_due)}
+                    {formatCurrency(invoice.balance_due ?? 0)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={invoice.status} />

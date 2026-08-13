@@ -48,7 +48,7 @@ export default async function QuotationDetailPage({ params }: PageProps) {
   }
 
   const canEdit =
-    currentUser?.role === "admin" || currentUser?.role === "manager";
+    currentUser?.role === "owner" || currentUser?.role === "manager";
   const isEditable = quotation.status === "draft" || quotation.status === "sent";
 
   return (
@@ -79,14 +79,14 @@ export default async function QuotationDetailPage({ params }: PageProps) {
               <p className="text-muted-foreground font-mono">
                 {quotation.quotation_number}
               </p>
-              {quotation.customer && (
+              {quotation.company && (
                 <p className="text-sm">
-                  Customer:{" "}
+                  Company:{" "}
                   <Link
-                    href={`/customers/${quotation.customer.id}`}
+                    href={`/companies/${quotation.company.id}`}
                     className="text-primary hover:underline"
                   >
-                    {quotation.customer.name}
+                    {quotation.company.name}
                   </Link>
                 </p>
               )}
@@ -98,9 +98,9 @@ export default async function QuotationDetailPage({ params }: PageProps) {
             </div>
 
             <div className="text-right space-y-1">
-              <p className="text-2xl font-bold">
-                {formatCurrency(quotation.total_amount)}
-              </p>
+              <h2 className="text-3xl font-bold tracking-tight mb-2 text-primary">
+                ₹{(quotation.total_amount ?? 0).toLocaleString()}
+              </h2>
               {quotation.valid_until && (
                 <p className="text-sm text-muted-foreground">
                   Valid until: {formatDate(quotation.valid_until)}
@@ -129,16 +129,16 @@ export default async function QuotationDetailPage({ params }: PageProps) {
       </Card>
 
       {/* System Details */}
-      {(quotation.system_capacity_kw || quotation.panel_type || quotation.inverter_type) && (
+      {(((quotation.capacity_kw ?? 0) > 0) || quotation.panel_type || quotation.inverter_type) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">System Specifications</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-3">
-            {quotation.system_capacity_kw && (
+            {(quotation.capacity_kw ?? 0) > 0 && (
               <div>
                 <p className="text-sm text-muted-foreground">Capacity</p>
-                <p className="font-medium">{quotation.system_capacity_kw} kW</p>
+                <span className="font-medium">{quotation.capacity_kw} kW</span>
               </div>
             )}
             {quotation.panel_type && (
@@ -190,7 +190,7 @@ export default async function QuotationDetailPage({ params }: PageProps) {
                       {formatCurrency(item.unit_price)}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(item.total_price)}
+                      {formatCurrency(item.line_total ?? 0)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -205,11 +205,9 @@ export default async function QuotationDetailPage({ params }: PageProps) {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>{formatCurrency(quotation.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Tax ({quotation.tax_percent}%)
-                </span>
-                <span>{formatCurrency(quotation.tax_amount)}</span>
+              <div className="flex justify-between py-2 text-sm border-t">
+                <span className="text-muted-foreground">Tax ({quotation.gst_percent}%)</span>
+                <span className="font-medium">{formatCurrency(quotation.gst_amount)}</span>
               </div>
               {quotation.discount_amount > 0 && (
                 <div className="flex justify-between text-sm">
@@ -220,7 +218,7 @@ export default async function QuotationDetailPage({ params }: PageProps) {
               <Separator />
               <div className="flex justify-between font-bold">
                 <span>Total</span>
-                <span>{formatCurrency(quotation.total_amount)}</span>
+                <span className="font-bold text-base">{formatCurrency(quotation.total_amount ?? 0)}</span>
               </div>
             </div>
           </div>

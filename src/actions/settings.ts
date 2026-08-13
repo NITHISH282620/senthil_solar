@@ -33,7 +33,7 @@ export async function getCompanySettings(): Promise<{
  */
 export async function updateCompanySettings(formData: FormData) {
   const currentUser = await getCurrentUser();
-  if (!currentUser || currentUser.role !== "admin") {
+  if (!currentUser || currentUser.role !== "owner") {
     return { error: "Unauthorized. Only admins can modify settings." };
   }
 
@@ -41,7 +41,7 @@ export async function updateCompanySettings(formData: FormData) {
   const raw: Record<string, unknown> = {};
   formData.forEach((value, key) => {
     const strVal = String(value);
-    if (key === "tax_rate") {
+    if (key === "default_gst_percent") {
       raw[key] = Number(strVal) || 18;
     } else {
       raw[key] = strVal;

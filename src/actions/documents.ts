@@ -94,7 +94,7 @@ export async function uploadDocument(formData: FormData) {
     .from("documents")
     .insert({
       name: parsed.data.name,
-      file_url: fileName,
+      file_path: fileName,
       file_type: file.type || null,
       file_size: file.size,
       category: parsed.data.category,
@@ -126,8 +126,8 @@ export async function uploadDocument(formData: FormData) {
   if (parsed.data.entity_id) {
     let route = "";
     switch (parsed.data.entity_type) {
-      case "project": route = `/projects/${parsed.data.entity_id}`; break;
-      case "customer": route = `/customers/${parsed.data.entity_id}`; break;
+      case "contract": route = `/contracts/${parsed.data.entity_id}`; break;
+      case "company": route = `/companies/${parsed.data.entity_id}`; break;
       case "employee": route = `/employees/${parsed.data.entity_id}`; break;
       case "quotation": route = `/quotations/${parsed.data.entity_id}`; break;
       case "invoice": route = `/billing/${parsed.data.entity_id}`; break;
@@ -157,15 +157,15 @@ export async function deleteDocument(id: string) {
   }
 
   // Permission check: only admin/manager or uploader
-  if (currentUser.role === "employee" && doc.uploaded_by !== currentUser.id) {
+  if (currentUser.role === "worker" && doc.uploaded_by !== currentUser.id) {
     return { error: "Unauthorized to delete this document" };
   }
 
   // 2. Remove from Storage
-  if (doc.file_url) {
+  if (doc.file_path) {
     const { error: storageError } = await supabase.storage
       .from(BUCKET_NAME)
-      .remove([doc.file_url]);
+      .remove([doc.file_path]);
     
     if (storageError) {
       console.error("Storage deletion failed:", storageError);
@@ -195,8 +195,8 @@ export async function deleteDocument(id: string) {
   if (doc.entity_id) {
     let route = "";
     switch (doc.entity_type) {
-      case "project": route = `/projects/${doc.entity_id}`; break;
-      case "customer": route = `/customers/${doc.entity_id}`; break;
+      case "contract": route = `/contracts/${doc.entity_id}`; break;
+      case "company": route = `/companies/${doc.entity_id}`; break;
       case "employee": route = `/employees/${doc.entity_id}`; break;
       case "quotation": route = `/quotations/${doc.entity_id}`; break;
       case "invoice": route = `/billing/${doc.entity_id}`; break;

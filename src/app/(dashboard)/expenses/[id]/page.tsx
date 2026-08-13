@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Receipt, Calendar, User, Briefcase, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ExpenseActions } from "@/components/shared/expense-actions";
 import { DocumentVault } from "@/components/shared/document-vault";
@@ -37,7 +36,7 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const canApprove = currentUser?.role === "admin" || currentUser?.role === "manager";
+  const canApprove = currentUser?.role === "owner" || currentUser?.role === "manager";
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -63,34 +62,18 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-4">
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileText className="h-5 w-5 text-muted-foreground" />
-                Expense Items
+                Expense Details
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {expense.items?.map((item, index) => (
-                  <div key={item.id} className="flex justify-between items-center pb-3 border-b last:border-0 last:pb-0">
-                    <div className="flex items-center gap-3">
-                      <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
-                        {index + 1}
-                      </div>
-                      <span className="font-medium">{item.description}</span>
-                    </div>
-                    <span className="font-semibold text-right">
-                      {formatCurrency(item.amount)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 pt-4 border-t flex justify-between items-center">
+              <div className="flex justify-between items-center">
                 <span className="text-muted-foreground font-medium">Total Amount</span>
-                <span className="text-2xl font-bold text-primary">
-                  {formatCurrency(expense.total_amount)}
-                </span>
+                <h2 className="text-3xl font-bold tracking-tight mb-2 text-primary">
+                  {formatCurrency(expense.amount ?? 0)}
+                </h2>
               </div>
             </CardContent>
           </Card>
@@ -122,7 +105,7 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
                 <div>
                   <div className="text-muted-foreground mb-1">Submitted By</div>
                   <div className="font-medium">{expense.employee?.full_name}</div>
-                  <div className="text-xs text-muted-foreground">{expense.employee?.employee_id}</div>
+                  <div className="text-xs text-muted-foreground">{expense.employee?.employee_code}</div>
                 </div>
               </div>
 
@@ -130,9 +113,9 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
 
               <div className="flex items-start gap-3">
                 <Calendar className="h-4 w-4 text-muted-foreground mt-0.5" />
-                <div>
-                  <div className="text-muted-foreground mb-1">Date Submitted</div>
-                  <div className="font-medium">{formatDate(expense.submitted_at)}</div>
+                <div className="flex justify-between items-center py-2 border-b">
+                  <span className="text-muted-foreground">Submitted At</span>
+                  <span className="font-medium">{formatDate(expense.created_at)}</span>
                 </div>
               </div>
 
@@ -146,18 +129,18 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {expense.project && (
+              {expense.contract && (
                 <>
                   <Separator />
                   <div className="flex items-start gap-3">
                     <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5" />
                     <div>
-                      <div className="text-muted-foreground mb-1">Linked Project</div>
+                      <div className="text-muted-foreground mb-1">Linked Contract</div>
                       <Link
-                        href={`/projects/${expense.project.id}`}
+                        href={`/contracts/${expense.contract.id}`}
                         className="font-medium text-amber-600 hover:underline"
                       >
-                        {expense.project.project_code}
+                        {expense.contract.contract_number}
                       </Link>
                     </div>
                   </div>

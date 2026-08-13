@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { ExpenseForm } from "@/components/forms/expense-form";
-import { getProjects } from "@/actions/projects";
+import { getContracts } from "@/actions/contracts";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default async function NewExpensePage() {
-  const { data: projects } = await getProjects();
+  const { data: contracts } = await getContracts();
 
   return (
     <div className="space-y-6">
@@ -18,10 +18,10 @@ export default async function NewExpensePage() {
       />
       <div className="max-w-4xl">
         <ExpenseForm
-          projects={(projects ?? []).map((p) => ({
-            id: p.id,
-            project_code: p.project_code,
-            name: p.name,
+          contracts={(contracts ?? []).map((c) => ({
+            id: c.id,
+            contract_number: c.contract_number,
+            title: c.title,
           }))}
         />
       </div>

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { recordPayment } from "@/actions/invoices";
+import { addPayment } from "@/actions/invoices";
 import { formatCurrency } from "@/lib/format";
 
 interface PaymentModalProps {
@@ -56,7 +56,7 @@ export function PaymentModal({
     formData.set("payment_method", method);
 
     try {
-      const result = await recordPayment(formData);
+      const result = await addPayment(formData);
       if (result?.error) {
         toast.error(result.error);
       } else {
@@ -64,7 +64,7 @@ export function PaymentModal({
         onClose();
         router.refresh();
       }
-    } catch (error) {
+    } catch {
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);

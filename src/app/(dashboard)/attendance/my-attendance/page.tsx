@@ -1,4 +1,4 @@
-import { Calendar, Clock, MapPin } from "lucide-react";
+import { Calendar, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -103,8 +103,8 @@ export default async function MyAttendancePage({ searchParams }: PageProps) {
                 ) : (
                   attendanceData?.map((record) => {
                     let hoursStr = "—";
-                    if (record.check_in && record.check_out) {
-                      const diff = new Date(record.check_out).getTime() - new Date(record.check_in).getTime();
+                    if (record.check_in_at && record.check_out_at) {
+                      const diff = new Date(record.check_out_at).getTime() - new Date(record.check_in_at).getTime();
                       const hours = Math.floor(diff / (1000 * 60 * 60));
                       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                       hoursStr = `${hours}h ${minutes}m`;
@@ -119,18 +119,18 @@ export default async function MyAttendancePage({ searchParams }: PageProps) {
                           <StatusBadge status={record.status} />
                         </td>
                         <td className="px-4 py-3">
-                          {record.check_in ? (
+                          {record.check_in_at ? (
                             <div className="flex items-center gap-1.5">
                               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                              {formatDate(record.check_in, "HH:mm")}
+                              {formatDate(record.check_in_at, "HH:mm")}
                             </div>
                           ) : "—"}
                         </td>
                         <td className="px-4 py-3">
-                          {record.check_out ? (
+                          {record.check_out_at ? (
                             <div className="flex items-center gap-1.5">
                               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                              {formatDate(record.check_out, "HH:mm")}
+                              {formatDate(record.check_out_at, "HH:mm")}
                             </div>
                           ) : "—"}
                         </td>

@@ -35,7 +35,7 @@ export function QuotationActions({
     setLoading(null);
   }
 
-  const isAdmin = userRole === "admin";
+  const isAdmin = userRole === "owner";
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -88,11 +88,11 @@ export function QuotationActions({
 
       {currentStatus === "approved" && isAdmin && (
         <Link 
-          href={`/projects/new?quotationId=${quotationId}`}
+          href={`/contracts/new?quotationId=${quotationId}`}
           className={buttonVariants({ size: "sm" })}
         >
           <Wrench className="mr-2 h-4 w-4" />
-          Convert to Work Order
+          Convert to Contract
         </Link>
       )}
     </div>

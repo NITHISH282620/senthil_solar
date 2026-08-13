@@ -86,8 +86,8 @@ export const createEmployeeSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: phoneSchema,
   role: z
-    .enum(["admin", "manager", "supervisor", "employee"])
-    .default("employee"),
+    .enum(["owner", "manager", "accountant", "engineer", "supervisor", "store_manager", "worker", "client"])
+    .default("worker"),
   department: optionalText(100),
   designation: optionalText(100),
   employee_type: z.enum(["daily_wage", "monthly_salary"]).default("daily_wage"),
@@ -121,7 +121,7 @@ export const updateEmployeeSchema = z.object({
   emergency_contact_name: optionalText(200),
   emergency_contact_phone: phoneSchema,
   // Admin-only fields
-  role: z.enum(["admin", "manager", "supervisor", "employee"]).optional(),
+  role: z.enum(["owner", "manager", "accountant", "engineer", "supervisor", "store_manager", "worker", "client"]).optional(),
   date_of_joining: optionalDate(),
   manager_id: z
     .string()
@@ -136,29 +136,33 @@ export const updateEmployeeSchema = z.object({
 
 // ─── Customers (client companies — becomes `companies` in Phase 1) ──
 
-export const createCustomerSchema = z.object({
+export const createCompanySchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
-  email: emailSchema,
-  phone: z.string().regex(/^\d{10,12}$/, "Phone must be 10-12 digits"),
-  alternate_phone: phoneSchema,
-  address: z.string().min(1, "Address is required").max(500),
+  legal_name: optionalText(200),
+  // Primary Contact Info
+  primary_contact_name: z.string().min(1, "Primary contact name is required").max(100),
+  primary_contact_email: emailSchema,
+  primary_contact_phone: phoneSchema,
+  
+  company_type: z.enum(['corporate','factory','industrial','commercial','government','residential']).default('corporate'),
+  gst_number: optionalText(20),
+  pan_number: optionalText(20),
+  billing_address: optionalText(500),
+  shipping_address: optionalText(500),
   city: optionalText(100),
   state: optionalText(100),
+  state_code: optionalText(10),
   pincode: optionalText(10),
-  gst_number: optionalText(20),
-  source: z
-    .enum(["referral", "website", "walk_in", "social_media", "other"])
-    .optional()
-    .transform((v) => v || null),
-  assigned_to: z
-    .string()
-    .optional()
-    .transform((v) => (v && v !== "none" ? v : null)),
-  status: z.enum(["active", "inactive", "prospect"]).default("active"),
+  payment_terms_days: optionalNumber(0),
+  credit_limit: optionalNumber(0),
+  tds_applicable: checkbox(),
+  tds_percent: optionalNumber(0),
+  retention_percent: optionalNumber(0, 100),
+  status: z.enum(["prospect", "active", "inactive", "blacklisted"]).default("active"),
   notes: optionalText(2000),
 });
 
-export const updateCustomerSchema = createCustomerSchema;
+export const updateCompanySchema = createCompanySchema;
 
 // ─── Projects (becomes `contracts` in Phase 1) ───────────
 
@@ -492,14 +496,12 @@ export const companySettingsSchema = z.object({
   email: emailSchema,
   gst_number: optionalText(20),
   pan_number: optionalText(10),
-  bank_name: optionalText(200),
-  bank_account_no: optionalText(30),
-  bank_ifsc: optionalText(15),
   invoice_prefix: z.string().max(10).default("INV"),
   quotation_prefix: z.string().max(10).default("QT"),
   expense_prefix: z.string().max(10).default("EXP"),
-  project_prefix: z.string().max(10).default("PRJ"),
-  tax_rate: z.coerce.number().min(0).max(100).default(18),
+  contract_prefix: z.string().max(10).default("CON"),
+  site_prefix: z.string().max(10).default("SITE"),
+  default_gst_percent: z.coerce.number().min(0).max(100).default(18),
   shift_start_time: z
     .string()
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)")
@@ -517,8 +519,8 @@ export const companySettingsSchema = z.object({
 
 export const DOCUMENT_ENTITY_TYPES = [
   "employee",
-  "customer",
-  "project",
+  "company",
+  "contract",
   "quotation",
   "invoice",
   "expense",

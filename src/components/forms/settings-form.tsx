@@ -120,54 +120,13 @@ export function SettingsForm({ settings }: SettingsFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="tax_rate">Default Tax Rate (%)</Label>
+            <Label htmlFor="default_gst_percent">Default GST Rate (%)</Label>
             <Input
-              id="tax_rate"
-              name="tax_rate"
+              id="default_gst_percent"
+              name="default_gst_percent"
               type="number"
               step="0.01"
-              defaultValue={settings.tax_rate}
-              disabled={loading}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bank Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Bank Details</CardTitle>
-          <CardDescription>
-            Bank account for invoices and payment receipts
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="bank_name">Bank Name</Label>
-            <Input
-              id="bank_name"
-              name="bank_name"
-              defaultValue={settings.bank_name ?? ""}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bank_account_no">Account Number</Label>
-            <Input
-              id="bank_account_no"
-              name="bank_account_no"
-              defaultValue={settings.bank_account_no ?? ""}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bank_ifsc">IFSC Code</Label>
-            <Input
-              id="bank_ifsc"
-              name="bank_ifsc"
-              defaultValue={settings.bank_ifsc ?? ""}
+              defaultValue={settings.default_gst_percent}
               disabled={loading}
             />
           </div>
@@ -199,6 +158,26 @@ export function SettingsForm({ settings }: SettingsFormProps) {
               id="quotation_prefix"
               name="quotation_prefix"
               defaultValue={settings.quotation_prefix}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="contract_prefix">Contract Prefix</Label>
+            <Input
+              id="contract_prefix"
+              name="contract_prefix"
+              defaultValue={settings.contract_prefix}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="site_prefix">Site Prefix</Label>
+            <Input
+              id="site_prefix"
+              name="site_prefix"
+              defaultValue={settings.site_prefix}
               disabled={loading}
             />
           </div>
