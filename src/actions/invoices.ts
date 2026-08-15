@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { getCompanySettings } from "./settings";
 import {
   paymentSchema,
   parseFormData,
@@ -152,11 +153,36 @@ export async function createInvoice(formData: FormData) {
     ? `${prefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
     : (seqData as string);
 
+  // Indian GST splits by place of supply: same state as ours means CGST+SGST,
+  // a different state means IGST. Always writing CGST/SGST produced a filing
+  // that is wrong for every out-of-state client, and the table's
+  // invoice_gst_mode_consistent constraint permits it because the amounts are
+  // still internally consistent — so nothing would have complained.
+  const [{ data: settings }, { data: client }] = await Promise.all([
+    getCompanySettings(),
+    supabase
+      .from("companies")
+      .select("state_code")
+      .eq("id", company_id)
+      .single(),
+  ]);
+
+  const ourStateCode = (settings as { state_code?: string | null } | null)?.state_code ?? null;
+  const clientStateCode =
+    (client as { state_code?: string | null } | null)?.state_code ?? null;
+
+  // Unknown state codes fall back to intra-state, the common case, rather than
+  // guessing at IGST.
+  const isInterstate =
+    !!ourStateCode && !!clientStateCode && ourStateCode !== clientStateCode;
+
   const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
   const taxable_amount = Math.max(0, subtotal - discount_amount);
-  const cgst_amount = (taxable_amount * (gst_percent / 2)) / 100;
-  const sgst_amount = cgst_amount;
-  const igst_amount = 0;
+  const totalGst = (taxable_amount * gst_percent) / 100;
+
+  const cgst_amount = isInterstate ? 0 : totalGst / 2;
+  const sgst_amount = isInterstate ? 0 : totalGst / 2;
+  const igst_amount = isInterstate ? totalGst : 0;
 
   const insertData = {
     invoice_number,
@@ -164,6 +190,8 @@ export async function createInvoice(formData: FormData) {
     contract_id: contract_id || null,
     subtotal,
     discount_amount,
+    place_of_supply_state_code: clientStateCode,
+    is_interstate: isInterstate,
     cgst_amount,
     sgst_amount,
     igst_amount,

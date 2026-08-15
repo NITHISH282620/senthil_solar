@@ -232,6 +232,129 @@ export async function updateSiteStage(
   return { error: null };
 }
 
+// ─── Site assignments ───────────────────────────────────────────────────────
+//
+// Nothing wrote this table before, which made attendance unreachable: check-in
+// is site-scoped and offers only the sites a person is assigned to, so with no
+// assignments no worker could ever mark a day.
+
+export interface SiteAssignmentRow {
+  id: string;
+  employee_id: string;
+  role_on_site: string;
+  assigned_date: string;
+  employee: { id: string; full_name: string; employee_code: string } | null;
+}
+
+export async function getSiteAssignments(siteId: string): Promise<{
+  data: SiteAssignmentRow[] | null;
+  error: string | null;
+}> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { data: null, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("site_assignments")
+    .select(
+      "id, employee_id, role_on_site, assigned_date, employee:profiles(id, full_name, employee_code)"
+    )
+    .eq("site_id", siteId)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .order("assigned_date", { ascending: false });
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as unknown as SiteAssignmentRow[], error: null };
+}
+
+/** Matches site_assignments_write, which gates on auth_is_back_office(). */
+const ASSIGN_ROLES = ["owner", "manager"];
+
+export async function assignToSite(
+  siteId: string,
+  employeeId: string,
+  roleOnSite: string
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !ASSIGN_ROLES.includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner or a manager can assign people to sites." };
+  }
+
+  if (!siteId || !employeeId) {
+    return { error: "Choose a person to assign." };
+  }
+
+  const supabase = await createClient();
+
+  // Re-activate a previous assignment rather than stacking duplicates.
+  const { data: existing } = await supabase
+    .from("site_assignments")
+    .select("id, is_active")
+    .eq("site_id", siteId)
+    .eq("employee_id", employeeId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  const prior = existing as { id: string; is_active: boolean } | null;
+
+  if (prior) {
+    if (prior.is_active) {
+      return { error: "That person is already assigned to this site." };
+    }
+    const { error } = await supabase
+      .from("site_assignments")
+      .update({
+        is_active: true,
+        removed_date: null,
+        role_on_site: roleOnSite,
+        assigned_date: new Date().toISOString().slice(0, 10),
+      })
+      .eq("id", prior.id);
+
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from("site_assignments").insert({
+      site_id: siteId,
+      employee_id: employeeId,
+      role_on_site: roleOnSite,
+      created_by: currentUser.id,
+    });
+
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(`/sites/${siteId}`);
+  return { error: null };
+}
+
+/**
+ * Take someone off a site. Kept as a soft removal so past attendance and
+ * payroll allocations still make sense against the assignment history.
+ */
+export async function removeFromSite(assignmentId: string, siteId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !ASSIGN_ROLES.includes(currentUser.role)) {
+    return { error: "Unauthorized." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("site_assignments")
+    .update({
+      is_active: false,
+      removed_date: new Date().toISOString().slice(0, 10),
+    })
+    .eq("id", assignmentId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/sites/${siteId}`);
+  return { error: null };
+}
+
 export async function getSiteStages(): Promise<{
   data: { code: string; label: string; sequence_no: number; color: string | null }[] | null;
   error: string | null;

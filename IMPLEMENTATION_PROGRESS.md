@@ -157,6 +157,27 @@ The §14 loop now closes end to end: ₹300 advance → `salary_advances` →
 
 ---
 
+## Phase 6 — Site crew, GST correctness (§32 walkthrough)
+
+**Status: complete.** `npm run verify` green.
+
+Walking the §32 end-to-end scenario found the blocker that mattered most:
+**nothing wrote `site_assignments`.** Attendance is site-scoped and offers only
+the sites a person is assigned to, so with no way to assign anyone, no worker
+could ever mark a day — and with no attendance there is no payroll and no
+labour cost on any site. Added assignment actions and a crew manager on the
+site page. Re-activates a prior assignment instead of stacking duplicates, and
+removal is soft so historic attendance and payroll allocations still resolve.
+
+**GST was wrong for every out-of-state client.** `createInvoice` always split
+CGST/SGST and never set `is_interstate`. Nothing would have caught it: the
+`invoice_gst_mode_consistent` constraint only checks that the amounts are
+internally consistent, which they were. It now compares the client's state code
+against ours and charges IGST across state lines, falling back to intra-state
+when either code is unknown rather than guessing.
+
+---
+
 ## Known-remaining (carried forward, not lost)
 
 - **Infrastructure, not code:** Supabase project, Vercel env vars, migrations
@@ -166,6 +187,3 @@ The §14 loop now closes end to end: ₹300 advance → `salary_advances` →
   `20260812000600_rls.sql`; no policy has been executed against a live database.
 - **Materials, vendors, purchase orders** have full schemas and no UI (§17, §18).
 - **Owner dashboard** is still the inherited placeholder (§19).
-- **`createInvoice` ignores GST mode** — it always splits CGST/SGST and never
-  sets `is_interstate`, so an interstate invoice would be wrong. The schema
-  constraint permits it because the amounts are still self-consistent.

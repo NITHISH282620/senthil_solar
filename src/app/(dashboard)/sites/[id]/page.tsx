@@ -8,7 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { QuickMoneyLauncher } from "@/components/shared/quick-money-launcher";
-import { getSite, getSiteStages } from "@/actions/sites";
+import { SiteCrew } from "@/components/shared/site-crew";
+import { getSite, getSiteStages, getSiteAssignments } from "@/actions/sites";
 import { getSiteProfit } from "@/actions/dashboard";
 import { getExpenseCategories } from "@/actions/cash-book";
 import { getEmployees } from "@/actions/employees";
@@ -33,11 +34,13 @@ const MONEY_ROLES = ["owner", "manager", "accountant"];
 export default async function SiteDetailPage({ params }: PageProps) {
   const { id } = await params;
 
-  const [{ data: site }, currentUser, { data: stages }] = await Promise.all([
-    getSite(id),
-    getCurrentUser(),
-    getSiteStages(),
-  ]);
+  const [{ data: site }, currentUser, { data: stages }, { data: assignments }] =
+    await Promise.all([
+      getSite(id),
+      getCurrentUser(),
+      getSiteStages(),
+      getSiteAssignments(id),
+    ]);
 
   if (!site) notFound();
 
@@ -209,7 +212,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Team</CardTitle>
+            <CardTitle className="text-base">Crew</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <InfoRow
@@ -220,13 +223,16 @@ export default async function SiteDetailPage({ params }: PageProps) {
               label="Supervisor"
               value={site.supervisor?.full_name ?? "Unassigned"}
             />
-            <InfoRow
-              label="Workers assigned"
-              value={
-                profit ? String(profit.assigned_workers) : site.workers_required
-                  ? `${site.workers_required} required`
-                  : "—"
-              }
+            <Separator />
+            <SiteCrew
+              siteId={site.id}
+              assignments={assignments ?? []}
+              people={(employees ?? []).map((e) => ({
+                id: e.id,
+                full_name: e.full_name,
+                employee_code: e.employee_code,
+              }))}
+              canManage={canEdit}
             />
           </CardContent>
         </Card>
