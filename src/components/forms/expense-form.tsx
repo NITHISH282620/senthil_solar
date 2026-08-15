@@ -19,23 +19,29 @@ import { toast } from "sonner";
 import { createExpense } from "@/actions/expenses";
 
 interface ExpenseFormProps {
-  contracts?: { id: string; contract_number: string; title: string }[];
+  /** From expense_categories, so custom categories appear without a rebuild. */
+  categories: { code: string; label: string; icon: string | null }[];
+  sites: { id: string; name: string; company_name: string | null }[];
 }
 
-export function ExpenseForm({ contracts = [] }: ExpenseFormProps) {
+export function ExpenseForm({ categories, sites }: ExpenseFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [category, setCategory] = useState("materials");
-  const [contractId, setContractId] = useState("");
+  const [category, setCategory] = useState("");
+  const [siteId, setSiteId] = useState("");
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
 
     try {
-      formData.set("category", category);
-      if (contractId && contractId !== "none") {
-        formData.set("contract_id", contractId);
+      if (!category) {
+        toast.error("Pick a category.");
+        setLoading(false);
+        return;
       }
+      formData.set("category", category);
+      // Site attribution is what makes the cost reach site profitability.
+      formData.set("site_id", siteId);
 
       const result = await createExpense(formData);
 
@@ -74,16 +80,17 @@ export function ExpenseForm({ contracts = [] }: ExpenseFormProps) {
 
             <div className="space-y-2">
               <Label htmlFor="category">Category *</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v || "materials")} disabled={loading}>
+              <Select value={category} onValueChange={(v) => setCategory(v ?? "")} disabled={loading}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="What was this for?" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="travel">Travel</SelectItem>
-                  <SelectItem value="materials">Materials</SelectItem>
-                  <SelectItem value="tools">Tools</SelectItem>
-                  <SelectItem value="meals">Meals</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.icon ? `${c.icon}  ` : ""}
+                      {c.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -102,16 +109,17 @@ export function ExpenseForm({ contracts = [] }: ExpenseFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="contract_id">Link to Contract (Optional)</Label>
-              <Select value={contractId} onValueChange={(v) => setContractId(v || "")} disabled={loading}>
+              <Label htmlFor="site_id">Site</Label>
+              <Select value={siteId} onValueChange={(v) => setSiteId(v ?? "")} disabled={loading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select contract" />
+                  <SelectValue placeholder="Which site?" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {contracts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.contract_number} - {c.title}
+                  <SelectItem value="none">Not site work</SelectItem>
+                  {sites.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                      {s.company_name ? ` — ${s.company_name}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

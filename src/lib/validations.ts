@@ -317,36 +317,32 @@ export const expenseItemSchema = z.object({
   amount: z.coerce.number().positive("Amount must be greater than 0"),
 });
 
+// Category is validated as a plain string, not an enum: expense_categories is
+// a lookup table the owner may extend without a migration, and the foreign key
+// is the real guard.
 export const expenseSchema = z.object({
-  project_id: z
+  site_id: z
     .string()
     .optional()
     .transform((v) => (v && v !== "none" ? v : null)),
-  date: z
+  expense_date: z
     .string()
     .optional()
     .transform((v) => v || new Date().toISOString().slice(0, 10)),
-  category: z.enum([
-    "food",
-    "tea",
-    "water",
-    "fuel",
-    "travel",
-    "vehicle",
-    "equipment_rental",
-    "labour",
-    "materials",
-    "miscellaneous",
-  ]),
+  category: z.string().min(1, "Category is required").max(50),
   title: z.string().min(1, "Title is required").max(300),
   description: optionalText(2000),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
   head_count: optionalNumber(1),
   meal_type: z
     .enum(["breakfast", "lunch", "dinner", "tea", "snacks"])
     .optional()
     .transform((v) => v || null),
+  payment_mode: z
+    .enum(["cash", "upi", "bank_transfer", "card", "credit"])
+    .default("cash"),
+  vendor_name: optionalText(200),
   receipt_url: optionalText(500),
-  items: jsonArray(expenseItemSchema, "expense items"),
 });
 
 export const expenseApprovalSchema = z.object({

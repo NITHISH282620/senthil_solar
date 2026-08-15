@@ -10,11 +10,16 @@ import type { CashBook, ExpenseCategory } from "@/types/database";
  * Who may move money. Field roles record their own spending; only the
  * back office can reverse an entry.
  */
-const ENTRY_ROLES = ["owner", "manager", "accountant", "engineer", "supervisor"];
+/**
+ * Must match the cash_book RLS policy, which gates writes on
+ * auth_can_see_money() — owner, manager, accountant. Listing a field role here
+ * would let the action create an expense and then be refused on the cash_book
+ * insert, and its compensating delete would be refused too, orphaning the
+ * expense. Field staff record spending through createExpense instead, which
+ * their RLS policy does permit for sites they are assigned to.
+ */
+const ENTRY_ROLES = ["owner", "manager", "accountant"];
 const VOID_ROLES = ["owner", "accountant"];
-
-/** Whose spending is trusted on sight. Everyone else's needs approving. */
-const SELF_APPROVING_ROLES = ["owner", "accountant"];
 
 /**
  * Money out that is NOT a site cost.
@@ -109,8 +114,9 @@ export async function createCashEntry(formData: FormData) {
       return { data: null, error: `Could not allocate an expense number: ${seqError.message}` };
     }
 
-    const selfApproved = SELF_APPROVING_ROLES.includes(currentUser.role);
-
+    // Anyone permitted to move company cash is authoritative about it: the
+    // money has already left the box, so the cost counts immediately rather
+    // than waiting in an approval queue.
     const { data: expense, error: expenseError } = await supabase
       .from("expenses")
       .insert({
@@ -123,9 +129,9 @@ export async function createCashEntry(formData: FormData) {
         paid_by: currentUser.id,
         payment_mode: v.payment_mode === "bank" ? "bank_transfer" : v.payment_mode,
         vendor_name: v.counterparty,
-        status: selfApproved ? "approved" : "pending",
-        approved_by: selfApproved ? currentUser.id : null,
-        approved_at: selfApproved ? new Date().toISOString() : null,
+        status: "approved",
+        approved_by: currentUser.id,
+        approved_at: new Date().toISOString(),
         created_by: currentUser.id,
       })
       .select("id")
