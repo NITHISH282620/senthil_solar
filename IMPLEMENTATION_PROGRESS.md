@@ -84,6 +84,30 @@ attribution is a prerequisite for every money form.
 
 ---
 
+## Phase 3 — Owner dashboard, sites, profitability (§11, §16, §19, §20)
+
+**Status: complete.** `npm run verify` green; 30 routes build.
+
+- **Owner dashboard rebuilt** to the business-first layout: cash in hand,
+  in/out today, what clients owe, active sites, workers present — then a
+  "needs attention" grid (overdue invoices, sites past deadline, sites missing
+  attendance, expenses to approve, open quotations, advances outstanding), then
+  site profitability and receivables. Every tile is a link into the work.
+  Reads `v_dashboard_today`, a single row of scalar sub-selects, so the whole
+  header costs one round trip rather than twelve.
+- **Field roles get a different dashboard entirely.** A worker or supervisor
+  sees their attendance and expense entry, never company money. RLS is the real
+  boundary; this avoids rendering tiles that would come back empty anyway.
+- **Site profitability** (`v_site_financials`) surfaced on both the dashboard
+  (worst margin first — the losing sites are what the owner needs) and each
+  site page, broken into materials / labour / site expenses against allocated
+  revenue.
+- **Sites** now have list, detail, new and edit pages, plus stage and status
+  handling. Quick money entry is embedded on the site page, pre-locked to that
+  site.
+
+---
+
 ## Known-remaining (carried forward, not lost)
 
 - **Infrastructure, not code:** Supabase project, Vercel env vars, migrations

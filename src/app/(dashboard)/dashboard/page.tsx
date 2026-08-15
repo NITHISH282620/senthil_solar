@@ -1,170 +1,386 @@
+import Link from "next/link";
 import {
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
+  HardHat,
   Users,
-  UserRoundSearch,
-  Wrench,
-  IndianRupee,
-  CalendarCheck,
-  Receipt,
+  AlertTriangle,
   Clock,
-  TrendingUp,
+  FileText,
+  Receipt,
+  TrendingDown,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { StatCard } from "@/components/shared/stat-card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/shared/page-header";
+import { QuickMoneyLauncher } from "@/components/shared/quick-money-launcher";
 import { getCurrentUser } from "@/actions/auth";
-import { createClient } from "@/lib/supabase/server";
+import {
+  getDashboardToday,
+  getSiteProfitability,
+  getReceivables,
+  getCashInHand,
+  getAttentionCounts,
+} from "@/actions/dashboard";
+import { getSiteOptions } from "@/actions/sites";
+import { getExpenseCategories } from "@/actions/cash-book";
+import { getEmployees } from "@/actions/employees";
+import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
+/** Roles that may see company-wide money. Everyone else gets the field view. */
+const MONEY_ROLES = ["owner", "manager", "accountant"];
+
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const supabase = await createClient();
+  const seesMoney = MONEY_ROLES.includes(user.role);
 
-  // Fetch counts based on role
-  const isAdminOrManager =
-    user.role === "owner" || user.role === "manager";
-
-  // Employee count (admin/manager only)
-  let employeeCount = 0;
-  if (isAdminOrManager) {
-    const { count } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("is_active", true);
-    employeeCount = count ?? 0;
+  if (!seesMoney) {
+    return <FieldDashboard name={user.full_name} />;
   }
 
-  // Greeting based on time of day
-  const hour = new Date().getHours();
-  let greeting = "Good morning";
-  if (hour >= 12 && hour < 17) greeting = "Good afternoon";
-  else if (hour >= 17) greeting = "Good evening";
+  const [
+    { data: today },
+    { data: siteProfit },
+    { data: receivables },
+    { data: cashInHand },
+    { data: attention },
+    { data: sites },
+    { data: categories },
+    { data: employees },
+  ] = await Promise.all([
+    getDashboardToday(),
+    getSiteProfitability({ limit: 5 }),
+    getReceivables(5),
+    getCashInHand(),
+    getAttentionCounts(),
+    getSiteOptions(),
+    getExpenseCategories(),
+    getEmployees({ status: "active" }),
+  ]);
+
+  const losingSites = (siteProfit ?? []).filter((s) => s.gross_profit < 0);
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Banner */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 p-6 sm:p-8 text-white">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/4 blur-xl" />
-        <div className="relative z-10">
-          <h1 className="text-2xl sm:text-3xl font-bold">
-            {greeting}, {user.full_name.split(" ")[0]}! ☀️
-          </h1>
-          <p className="text-white/80 mt-2 max-w-lg">
-            {isAdminOrManager
-              ? "Here's an overview of your solar operations. Manage your team, track work orders, and monitor performance."
-              : "Here's your daily summary. Check your work orders and update your progress."}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={`Good morning, ${user.full_name.split(" ")[0]}`}
+        description="Where the work is, and where the money went."
+      >
+        <QuickMoneyLauncher
+          sites={sites ?? []}
+          categories={categories ?? []}
+          workers={(employees ?? []).map((e) => ({
+            id: e.id,
+            full_name: e.full_name,
+          }))}
+        />
+      </PageHeader>
+
+      {/* Money and work, today */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <Tile
+          label="Cash in hand"
+          value={formatCurrency(cashInHand)}
+          icon={<Wallet className="h-4 w-4" />}
+          tone={cashInHand < 0 ? "bad" : "neutral"}
+          href="/cash"
+        />
+        <Tile
+          label="In today"
+          value={formatCurrency(Number(today?.cash_in_today ?? 0))}
+          icon={<ArrowDownLeft className="h-4 w-4" />}
+          tone="good"
+          href="/cash?direction=in"
+        />
+        <Tile
+          label="Out today"
+          value={formatCurrency(Number(today?.cash_out_today ?? 0))}
+          icon={<ArrowUpRight className="h-4 w-4" />}
+          tone="bad"
+          href="/cash?direction=out"
+        />
+        <Tile
+          label="Clients owe"
+          value={formatCurrency(Number(today?.total_outstanding ?? 0))}
+          icon={<Receipt className="h-4 w-4" />}
+          href="/billing"
+        />
+        <Tile
+          label="Active sites"
+          value={String(today?.active_sites ?? 0)}
+          icon={<HardHat className="h-4 w-4" />}
+          href="/sites"
+        />
+        <Tile
+          label="Workers present"
+          value={String(today?.workers_present_today ?? 0)}
+          icon={<Users className="h-4 w-4" />}
+          href="/attendance"
+        />
       </div>
 
-      {/* Stats Grid */}
-      {isAdminOrManager ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Active Employees"
-            value={employeeCount}
-            icon={Users}
-            description="Currently active team members"
+      {/* Needs attention */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Needs attention</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Attention
+            label="Overdue invoices"
+            count={Number(today?.overdue_invoices ?? 0)}
+            icon={<AlertTriangle className="h-4 w-4" />}
+            href="/billing?status=overdue"
           />
-          <StatCard
-            title="Customers"
-            value="—"
-            icon={UserRoundSearch}
-            description="Total customers"
-            iconColor="text-blue-600"
+          <Attention
+            label="Sites past deadline"
+            count={Number(today?.delayed_sites ?? 0)}
+            icon={<Clock className="h-4 w-4" />}
+            href="/sites"
           />
-          <StatCard
-            title="Active Work Orders"
-            value="—"
-            icon={Wrench}
-            description="In progress"
-            iconColor="text-emerald-600"
+          <Attention
+            label="Sites missing attendance"
+            count={Number(today?.sites_missing_attendance ?? 0)}
+            icon={<Users className="h-4 w-4" />}
+            href="/attendance"
           />
-          <StatCard
-            title="Revenue"
-            value="—"
-            icon={IndianRupee}
-            description="This month"
-            iconColor="text-purple-600"
+          <Attention
+            label="Expenses to approve"
+            count={Number(today?.pending_expense_approvals ?? 0)}
+            icon={<Receipt className="h-4 w-4" />}
+            href="/expenses?status=pending"
           />
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="My Work Orders"
-            value="—"
-            icon={Wrench}
-            description="Assigned to you"
+          <Attention
+            label="Open quotations"
+            count={attention?.pendingQuotations ?? 0}
+            icon={<FileText className="h-4 w-4" />}
+            href="/quotations"
           />
-          <StatCard
-            title="Attendance"
-            value="—"
-            icon={CalendarCheck}
-            description="This month"
-            iconColor="text-emerald-600"
+          <Attention
+            label="Advances outstanding"
+            count={attention?.outstandingAdvances ?? 0}
+            icon={<Wallet className="h-4 w-4" />}
+            href="/employees"
           />
-          <StatCard
-            title="My Expenses"
-            value="—"
-            icon={Receipt}
-            description="Pending approval"
-            iconColor="text-blue-600"
-          />
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* Quick Actions */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="rounded-lg p-3 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30">
-              <Clock size={24} className="text-amber-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold">Mark Attendance</h3>
-              <p className="text-sm text-muted-foreground">
-                Check in for today
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Site profitability — worst first */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              {losingSites.length > 0 && (
+                <TrendingDown className="h-4 w-4 text-red-600" />
+              )}
+              Site profitability
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(siteProfit ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No active sites yet.
               </p>
-            </div>
+            ) : (
+              (siteProfit ?? []).map((s) => (
+                <Link
+                  key={s.site_id}
+                  href={`/sites/${s.site_id}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {s.site_name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatCurrency(Number(s.total_cost))} spent of{" "}
+                      {formatCurrency(Number(s.revenue_allocated))}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        Number(s.gross_profit) < 0
+                          ? "text-red-600"
+                          : "text-emerald-600"
+                      )}
+                    >
+                      {formatCurrency(Number(s.gross_profit))}
+                    </div>
+                    {s.margin_percent !== null && (
+                      <div className="text-xs text-muted-foreground">
+                        {Number(s.margin_percent)}% margin
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              ))
+            )}
           </CardContent>
         </Card>
 
-        {isAdminOrManager && (
-          <>
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="rounded-lg p-3 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
-                  <UserRoundSearch size={24} className="text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Add Customer</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Register a new customer
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+        {/* Receivables */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Money owed to you</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(receivables ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nothing outstanding.
+              </p>
+            ) : (
+              (receivables ?? []).map((r) => (
+                <Link
+                  key={r.invoice_id}
+                  href={`/billing/${r.invoice_id}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {r.company_name}
+                    </div>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {r.invoice_number}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold tabular-nums">
+                      {formatCurrency(Number(r.balance_due))}
+                    </div>
+                    {Number(r.days_overdue) > 0 && (
+                      <div className="text-xs text-red-600">
+                        {r.days_overdue} days overdue
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="rounded-lg p-3 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30">
-                  <TrendingUp size={24} className="text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">View Reports</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Analytics and insights
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </>
+function Tile({
+  label,
+  value,
+  icon,
+  tone = "neutral",
+  href,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  tone?: "good" | "bad" | "neutral";
+  href: string;
+}) {
+  return (
+    <Link href={href}>
+      <Card className="h-full transition-colors hover:border-primary/50">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-xs">{label}</span>
+            {icon}
+          </div>
+          <div
+            className={cn(
+              "mt-1 text-lg font-semibold tabular-nums",
+              tone === "good" && "text-emerald-600",
+              tone === "bad" && "text-red-600"
+            )}
+          >
+            {value}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function Attention({
+  label,
+  count,
+  icon,
+  href,
+}: {
+  label: string;
+  count: number;
+  icon: React.ReactNode;
+  href: string;
+}) {
+  const isClear = count === 0;
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors",
+        isClear
+          ? "text-muted-foreground"
+          : "border-amber-500/40 bg-amber-500/5 hover:border-amber-500"
+      )}
+    >
+      <span className="flex items-center gap-2 text-sm">
+        {icon}
+        {label}
+      </span>
+      <span
+        className={cn(
+          "text-sm font-semibold tabular-nums",
+          !isClear && "text-amber-600 dark:text-amber-400"
         )}
+      >
+        {count}
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * Workers, engineers and supervisors get their own work, never company money.
+ * The access model is enforced in RLS; this only avoids rendering tiles that
+ * would come back empty for them anyway.
+ */
+function FieldDashboard({ name }: { name: string }) {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={`Hello, ${name.split(" ")[0]}`}
+        description="Your work today."
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link href="/attendance/my-attendance">
+          <Card className="transition-colors hover:border-primary/50">
+            <CardContent className="p-6">
+              <Users className="mb-2 h-5 w-5 text-muted-foreground" />
+              <div className="font-medium">My attendance</div>
+              <p className="text-sm text-muted-foreground">
+                Check in, check out, and see this month.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/expenses/new">
+          <Card className="transition-colors hover:border-primary/50">
+            <CardContent className="p-6">
+              <Receipt className="mb-2 h-5 w-5 text-muted-foreground" />
+              <div className="font-medium">Record an expense</div>
+              <p className="text-sm text-muted-foreground">
+                Submit what you spent on site for approval.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   );
