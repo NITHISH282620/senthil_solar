@@ -108,6 +108,55 @@ attribution is a prerequisite for every money form.
 
 ---
 
+## Phase 4 — Expenses, RLS alignment (§5, §15, §26.5–8)
+
+**Status: complete.** See the commit for detail.
+
+Static RLS review: all 46 tables enable RLS and carry policies; money tables
+gate on `auth_can_see_money()` (owner, manager, accountant), so field roles are
+excluded as §5 requires. **Still unexecuted against a live database.**
+
+That review caught a bug from Phase 2: `createCashEntry` allowed engineers and
+supervisors, but `cash_book_write` does not. Such a user would have created the
+expense, been refused on the cash book, and been refused again on the
+compensating delete — orphaning an expense that silently inflated site cost.
+Entry roles now mirror the policy; field staff use `createExpense` instead.
+
+Both expense functions were stubs. Implemented, along with a rewrite of the
+stale `expenseSchema` (it targeted `project_id`/`date` and hardcoded categories
+that are not rows in `expense_categories`).
+
+---
+
+## Phase 5 — Attendance and payroll (§12, §13, §14, §25)
+
+**Status: complete.** `npm run verify` green.
+
+**Check-in was broken in two ways at once.** `attendance.site_id` is `NOT NULL`
+and the day is unique per `(employee_id, site_id, date)`, but `checkIn` sent no
+site and upserted on `employee_id,date` — so it violated a NOT NULL constraint
+and named a constraint that does not exist. Check-in is now site-scoped, picks
+up the person's active assignments, and captures GPS on a best-effort basis
+(a refused permission must not stop someone marking attendance). Check-out
+closes the most recent still-open row rather than assuming one row per day, and
+derives `worked_hours`, which payroll consumes.
+
+**Payroll engine** (`generatePayroll`) builds a month from attendance with
+nothing keyed by hand: days from `v_attendance_monthly`, rates from the
+profile, deductions from outstanding advances. Rates are snapshotted onto each
+line, so a later rate change cannot rewrite an issued payslip. Pay is allocated
+across the sites the person actually worked, via `payroll_site_allocations` —
+this is what carries labour into `v_site_financials`.
+
+**Finalising** recovers advances oldest-first, capped at both what is owed and
+the gross (a payslip can never go negative), then locks the month's attendance.
+Owner-only, and irreversible by design.
+
+The §14 loop now closes end to end: ₹300 advance → `salary_advances` →
+`advance_deduction` on the payslip → recovered on finalise.
+
+---
+
 ## Known-remaining (carried forward, not lost)
 
 - **Infrastructure, not code:** Supabase project, Vercel env vars, migrations
@@ -115,7 +164,6 @@ attribution is a prerequisite for every money form.
   "Setup required".
 - **RLS is written but unverified** (§5, §26.5–8). 482 lines exist in
   `20260812000600_rls.sql`; no policy has been executed against a live database.
-- **Attendance → payroll** is not yet wired (§13, §25).
 - **Materials, vendors, purchase orders** have full schemas and no UI (§17, §18).
 - **Owner dashboard** is still the inherited placeholder (§19).
 - **`createInvoice` ignores GST mode** — it always splits CGST/SGST and never

@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   Wallet,
   HardHat,
+  Banknote,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,12 @@ const navItems: NavItem[] = [
     href: "/employees",
     icon: Users,
     roles: ["owner", "manager"],
+  },
+  {
+    title: "Payroll",
+    href: "/payroll",
+    icon: Banknote,
+    roles: ["owner", "manager", "accountant"],
   },
 ];
 

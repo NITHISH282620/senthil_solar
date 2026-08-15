@@ -2,7 +2,7 @@ import { Calendar, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { getAttendance } from "@/actions/attendance";
+import { getAttendance, getMyAssignedSites } from "@/actions/attendance";
 import { getCurrentUser } from "@/actions/auth";
 import { formatDate } from "@/lib/format";
 import type { Metadata } from "next";
@@ -23,10 +23,12 @@ export default async function MyAttendancePage({ searchParams }: PageProps) {
   const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
   const month = typeof resolvedParams.month === "string" ? resolvedParams.month : currentMonth;
 
-  const [currentUser, { data: attendanceData }] = await Promise.all([
-    getCurrentUser(),
-    getAttendance({ month }), // fetch current month by default
-  ]);
+  const [currentUser, { data: attendanceData }, { data: assignedSites }] =
+    await Promise.all([
+      getCurrentUser(),
+      getAttendance({ month }), // fetch current month by default
+      getMyAssignedSites(),
+    ]);
 
   // Check if they checked in today
   const today = new Date().toISOString().split("T")[0];
@@ -45,7 +47,10 @@ export default async function MyAttendancePage({ searchParams }: PageProps) {
         />
         
         <div className="flex-shrink-0">
-          <CheckInOutButton todayRecord={todayRecord ?? null} />
+          <CheckInOutButton
+            todayRecord={todayRecord ?? null}
+            sites={assignedSites ?? []}
+          />
         </div>
       </div>
 
