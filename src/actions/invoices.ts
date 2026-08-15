@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
-import { sanitizeSearchInput } from "@/lib/validations";
+import {
+  paymentSchema,
+  parseFormData,
+  sanitizeSearchInput,
+} from "@/lib/validations";
 import type {
   Invoice,
   InvoiceItem,
@@ -12,6 +16,18 @@ import type {
   Contract,
   Profile,
 } from "@/types/database";
+
+/**
+ * payments.payment_method and cash_book.payment_mode use different
+ * vocabularies; cash_book has no cheque, which settles through the bank.
+ */
+const CASH_BOOK_MODE = {
+  cash: "cash",
+  bank_transfer: "bank",
+  cheque: "bank",
+  upi: "upi",
+  card: "card",
+} as const;
 
 /** Shape of a line item as posted by the invoice form (JSON-encoded in FormData). */
 type InvoiceItemInput = {
@@ -208,12 +224,152 @@ export async function deleteInvoice(id: string) {
   return { error: null };
 }
 
+/**
+ * Record a client payment against an invoice.
+ *
+ * The database owns the arithmetic: a trigger recomputes the invoice's
+ * amount_received and status, and another rejects anything that would overpay.
+ * This only has to write the payment row and mirror it into the cash book so
+ * the money shows up in the running balance.
+ */
 export async function addPayment(formData: FormData) {
-  // simplified
-  return { data: null, error: "Not implemented in simplified rewrite" };
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager", "accountant"].includes(currentUser.role)) {
+    return { data: null, error: "Unauthorized. Only the owner, a manager or an accountant can record payments." };
+  }
+
+  const parsed = parseFormData(paymentSchema, formData);
+  if (!parsed.success) {
+    return { data: null, error: parsed.error };
+  }
+
+  const v = parsed.data;
+  const supabase = await createClient();
+
+  // Carry the invoice's lineage onto the payment so receivables and site
+  // profitability stay attributable.
+  const { data: invoice, error: invError } = await supabase
+    .from("invoices")
+    .select("id, company_id, contract_id, site_id, balance_due, invoice_number")
+    .eq("id", v.invoice_id)
+    .is("deleted_at", null)
+    .single();
+
+  if (invError || !invoice) {
+    return { data: null, error: "Invoice not found." };
+  }
+
+  const inv = invoice as {
+    id: string;
+    company_id: string;
+    contract_id: string | null;
+    site_id: string | null;
+    balance_due: number;
+    invoice_number: string;
+  };
+
+  const { data, error } = await supabase
+    .from("payments")
+    .insert({
+      invoice_id: inv.id,
+      company_id: inv.company_id,
+      contract_id: inv.contract_id,
+      bank_account_id: v.bank_account_id || null,
+      direction: "inbound",
+      amount: v.amount,
+      payment_date: v.payment_date,
+      payment_method: v.payment_method,
+      reference_number: v.reference_number,
+      tds_deducted: v.tds_deducted,
+      notes: v.notes,
+      received_by: currentUser.id,
+      created_by: currentUser.id,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  const payment = data as { id: string };
+
+  // Mirror into the cash book. cash_book requires either a site or the office
+  // flag, and only accepts cash/upi/bank/card.
+  const { error: cashError } = await supabase.from("cash_book").insert({
+    entry_date: v.payment_date,
+    direction: "in",
+    amount: v.amount,
+    payment_mode: CASH_BOOK_MODE[v.payment_method],
+    bank_account_id: v.bank_account_id || null,
+    site_id: inv.site_id,
+    contract_id: inv.contract_id,
+    company_id: inv.company_id,
+    is_office: inv.site_id === null,
+    description: `Payment received against invoice ${inv.invoice_number}`,
+    reference_table: "payments",
+    reference_id: payment.id,
+    handled_by: currentUser.id,
+    created_by: currentUser.id,
+  });
+
+  if (cashError) {
+    // Keep the two ledgers consistent rather than leaving money unexplained.
+    await supabase.from("payments").delete().eq("id", payment.id);
+    return { data: null, error: `Payment could not be posted to the cash book: ${cashError.message}` };
+  }
+
+  revalidatePath("/billing");
+  revalidatePath(`/billing/${inv.id}`);
+  revalidatePath("/dashboard");
+  return { data: payment, error: null };
 }
 
+/**
+ * Reverse a payment. Financial records are soft-deleted, never destroyed —
+ * the invoice trigger only counts rows with deleted_at IS NULL, so soft
+ * deletion is what restores the balance.
+ */
 export async function deletePayment(id: string) {
-  // simplified
-  return { error: "Not implemented in simplified rewrite" };
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "accountant"].includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner or an accountant can reverse a payment." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: payment, error: fetchError } = await supabase
+    .from("payments")
+    .select("id, invoice_id")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .single();
+
+  if (fetchError || !payment) {
+    return { error: "Payment not found." };
+  }
+
+  const now = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("payments")
+    .update({ deleted_at: now })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  // Withdraw the matching cash-book line so the balance follows.
+  await supabase
+    .from("cash_book")
+    .update({ deleted_at: now })
+    .eq("reference_table", "payments")
+    .eq("reference_id", id)
+    .is("deleted_at", null);
+
+  const invoiceId = (payment as { invoice_id: string | null }).invoice_id;
+
+  revalidatePath("/billing");
+  if (invoiceId) revalidatePath(`/billing/${invoiceId}`);
+  revalidatePath("/dashboard");
+  return { error: null };
 }

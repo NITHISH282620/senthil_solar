@@ -17,6 +17,8 @@ import {
   Sun,
   LogOut,
   ChevronLeft,
+  Wallet,
+  HardHat,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,13 @@ const navItems: NavItem[] = [
     roles: ["owner", "manager"],
   },
   { title: "Contracts", href: "/contracts", icon: Briefcase },
+  { title: "Sites", href: "/sites", icon: HardHat },
+  {
+    title: "Cash Book",
+    href: "/cash",
+    icon: Wallet,
+    roles: ["owner", "manager", "accountant"],
+  },
   { title: "Attendance", href: "/attendance", icon: CalendarCheck },
   { title: "Expenses", href: "/expenses", icon: Receipt },
   {

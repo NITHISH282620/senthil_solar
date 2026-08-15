@@ -16,8 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-// We don't have createContract / updateContract yet, we will just stub them out for now
-// import { createContract, updateContract } from "@/actions/contracts";
+import { createContract, updateContract } from "@/actions/contracts";
 import type { Contract, Company } from "@/types/database";
 
 interface ContractFormProps {
@@ -33,8 +32,32 @@ export function ContractForm({ initialData, companies }: ContractFormProps) {
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
-    toast.error("Contract creation/updating action needs to be implemented");
-    setLoading(false);
+
+    // Select is not a native control, so its value has to be posted explicitly.
+    formData.set("company_id", companyId);
+    formData.set("status", status);
+
+    if (initialData) {
+      const { error } = await updateContract(initialData.id, formData);
+      if (error) {
+        toast.error(error);
+        setLoading(false);
+        return;
+      }
+      toast.success("Contract updated");
+      router.push(`/contracts/${initialData.id}`);
+    } else {
+      const { data, error } = await createContract(formData);
+      if (error || !data) {
+        toast.error(error ?? "Could not create the contract.");
+        setLoading(false);
+        return;
+      }
+      toast.success(`Contract ${data.contract_number} created`);
+      router.push(`/contracts/${data.id}`);
+    }
+
+    router.refresh();
   }
 
   return (

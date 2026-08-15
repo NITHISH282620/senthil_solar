@@ -390,27 +390,35 @@ export const updatePayrollSchema = z.object({
 
 // ─── Quotations ──────────────────────────────────────────
 
+// quotation_items.line_total is GENERATED ALWAYS; writing it raises 428C9.
 export const quotationLineItemSchema = z.object({
+  section: z
+    .enum(["material", "installation", "transport", "labour", "other"])
+    .default("material"),
   description: z.string().min(1, "Description is required").max(500),
+  hsn_sac_code: optionalText(20),
   unit: z.string().min(1).max(50).default("nos"),
   quantity: z.coerce.number().positive("Quantity must be greater than 0"),
   unit_price: z.coerce.number().min(0, "Price cannot be negative"),
-  total_price: z.coerce.number().min(0),
   sort_order: z.coerce.number().int().min(0).default(0),
 });
 
+// Mirrors the quotations table. total_amount is GENERATED ALWAYS and is
+// deliberately absent — the database derives it from the other three.
 export const quotationDataSchema = z.object({
-  customer_id: z.string().uuid("Customer is required"),
+  company_id: z.string().uuid("Client company is required"),
   title: z.string().min(1, "Title is required").max(300),
   description: optionalText(2000),
-  system_capacity_kw: optionalNumber(0),
+  capacity_kw: optionalNumber(0),
   panel_type: optionalText(100),
   inverter_type: optionalText(100),
   subtotal: z.coerce.number().min(0),
-  tax_percent: z.coerce.number().min(0).max(100).default(18),
-  tax_amount: z.coerce.number().min(0).default(0),
+  gst_percent: z.coerce.number().min(0).max(100).default(18),
+  gst_amount: z.coerce.number().min(0).default(0),
   discount_amount: z.coerce.number().min(0).default(0),
-  total_amount: z.coerce.number().min(0),
+  warranty_terms: optionalText(2000),
+  payment_terms: optionalText(2000),
+  terms: optionalText(4000),
   valid_until: optionalDate(),
   notes: optionalText(2000),
   status: z
@@ -461,12 +469,116 @@ export const invoiceSchema = z.object({
 export const paymentSchema = z.object({
   invoice_id: z.string().uuid("Invoice is required"),
   amount: z.coerce.number().positive("Amount must be greater than 0"),
-  payment_method: z.enum(["cash", "bank_transfer", "cheque", "upi"]),
+  payment_method: z.enum(["cash", "bank_transfer", "cheque", "upi", "card"]),
   payment_date: z.string().min(1, "Payment date is required"),
   reference_number: optionalText(100),
-  tds_on_payment: z.coerce.number().min(0).default(0),
+  tds_deducted: z.coerce.number().min(0).default(0),
+  bank_account_id: z.string().uuid().optional().or(z.literal("")),
   notes: optionalText(2000),
 });
+
+// ─── Sites ───────────────────────────────────────────────
+//
+// site_code and company_id are omitted on purpose: the first is allocated by
+// the database sequence, the second is derived from the parent contract.
+
+export const siteSchema = z
+  .object({
+    contract_id: z.string().uuid("Parent contract is required"),
+    name: z.string().min(1, "Site name is required").max(200),
+    address: optionalText(500),
+    district: optionalText(100),
+    state: optionalText(100),
+    pincode: optionalText(10),
+    gps_lat: optionalNumber(-90, 90),
+    gps_lng: optionalNumber(-180, 180),
+    geofence_radius_m: z.coerce.number().int().positive().default(500),
+    capacity_kw: optionalNumber(0),
+    panel_count: optionalNumber(0),
+    panel_type: optionalText(100),
+    inverter_type: optionalText(100),
+    site_engineer_id: z.string().uuid().optional().or(z.literal("")),
+    supervisor_id: z.string().uuid().optional().or(z.literal("")),
+    stage: z.string().min(1).max(50).default("planning"),
+    progress_percent: z.coerce.number().int().min(0).max(100).default(0),
+    planned_start_date: optionalDate(),
+    planned_end_date: optionalDate(),
+    actual_start_date: optionalDate(),
+    actual_end_date: optionalDate(),
+    allocated_value: z.coerce.number().min(0).default(0),
+    workers_required: optionalNumber(0),
+    status: z.enum(["active", "on_hold", "completed", "cancelled"]).default("active"),
+    notes: optionalText(2000),
+  })
+  .refine(
+    (v) =>
+      !v.planned_end_date ||
+      !v.planned_start_date ||
+      v.planned_end_date >= v.planned_start_date,
+    {
+      message: "Planned end cannot be before the planned start",
+      path: ["planned_end_date"],
+    }
+  );
+
+// ─── Cash book / quick money entry ───────────────────────
+//
+// This is the highest-traffic form in the product: the owner records Rs 5 tea
+// as readily as Rs 5,00,000 from a client, often one-handed on a phone. Every
+// field beyond amount and direction therefore has a workable default.
+
+export const cashEntrySchema = z
+  .object({
+    direction: z.enum(["in", "out"]),
+    amount: z.coerce.number().positive("Amount must be greater than 0"),
+    entry_date: optionalDate(),
+    category: z.string().min(1, "Category is required").max(50),
+    payment_mode: z.enum(["cash", "upi", "bank", "card"]).default("cash"),
+    bank_account_id: z.string().uuid().optional().or(z.literal("")),
+    // Office overheads carry no site; cash_book enforces one or the other.
+    site_id: z.string().uuid().optional().or(z.literal("")),
+    is_office: checkbox(),
+    description: z.string().min(1, "Say what this was for").max(500),
+    counterparty: optionalText(200),
+    employee_id: z.string().uuid().optional().or(z.literal("")),
+    notes: optionalText(2000),
+  })
+  .refine((v) => v.is_office || !!v.site_id, {
+    message: "Pick a site, or mark this as an office expense",
+    path: ["site_id"],
+  })
+  .refine((v) => v.payment_mode !== "bank" || !!v.bank_account_id, {
+    message: "Choose which bank account this moved through",
+    path: ["bank_account_id"],
+  })
+  .refine((v) => v.category !== "worker_advance" || !!v.employee_id, {
+    message: "Choose which worker received the advance",
+    path: ["employee_id"],
+  });
+
+// ─── Contracts ───────────────────────────────────────────
+
+export const contractSchema = z.object({
+  company_id: z.string().uuid("Client company is required"),
+  title: z.string().min(1, "Contract title is required").max(300),
+  scope_description: optionalText(4000),
+  contract_value: z.coerce.number().min(0).default(0),
+  total_capacity_kw: optionalNumber(0),
+  start_date: optionalDate(),
+  deadline_date: optionalDate(),
+  actual_end_date: optionalDate(),
+  payment_terms_days: z.coerce.number().int().min(0).default(30),
+  retention_percent: z.coerce.number().min(0).max(100).default(0),
+  penalty_per_day: z.coerce.number().min(0).default(0),
+  penalty_cap_percent: z.coerce.number().min(0).default(10),
+  status: z
+    .enum(["draft", "active", "on_hold", "completed", "closed", "cancelled"])
+    .default("draft"),
+  notes: optionalText(2000),
+}).refine(
+  (v) => !v.deadline_date || !v.start_date || v.deadline_date >= v.start_date,
+  { message: "Deadline cannot be before the start date", path: ["deadline_date"] }
+);
 
 // ─── Submissions ─────────────────────────────────────────
 

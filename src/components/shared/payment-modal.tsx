@@ -109,7 +109,7 @@ export function PaymentModal({
                   <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="cheque">Cheque</SelectItem>
                   <SelectItem value="upi">UPI</SelectItem>
-                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                  <SelectItem value="card">Card</SelectItem>
                 </SelectContent>
               </Select>
             </div>

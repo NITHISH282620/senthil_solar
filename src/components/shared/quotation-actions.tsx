@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, Send, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { updateQuotationStatus } from "@/actions/quotations";
+import { convertQuotationToContract } from "@/actions/contracts";
 
 interface QuotationActionsProps {
   quotationId: string;
@@ -33,6 +33,21 @@ export function QuotationActions({
       router.refresh();
     }
     setLoading(null);
+  }
+
+  async function handleConvert() {
+    setLoading("convert");
+    const { data, error } = await convertQuotationToContract(quotationId);
+
+    if (error || !data) {
+      toast.error(error ?? "Could not convert this quotation.");
+      setLoading(null);
+      return;
+    }
+
+    toast.success(`Contract ${data.contract_number} created`);
+    router.push(`/contracts/${data.id}`);
+    router.refresh();
   }
 
   const isAdmin = userRole === "owner";
@@ -87,13 +102,14 @@ export function QuotationActions({
       )}
 
       {currentStatus === "approved" && isAdmin && (
-        <Link 
-          href={`/contracts/new?quotationId=${quotationId}`}
-          className={buttonVariants({ size: "sm" })}
-        >
-          <Wrench className="mr-2 h-4 w-4" />
+        <Button size="sm" onClick={handleConvert} disabled={loading !== null}>
+          {loading === "convert" ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Wrench className="mr-2 h-4 w-4" />
+          )}
           Convert to Contract
-        </Link>
+        </Button>
       )}
     </div>
   );
