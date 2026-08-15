@@ -14,21 +14,41 @@ const BUCKET_NAME = "documents";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
+/**
+ * Write an audit row.
+ *
+ * The columns are table_name / record_id / new_values, and `action` is
+ * constrained to insert|update|delete|restore|login|export — so the earlier
+ * shape (entity_type, entity_id, details, action 'document_upload') was
+ * rejected on every call. Nothing surfaced it, because the result was never
+ * inspected: the audit trail §23 requires was silently empty.
+ *
+ * Failures are logged rather than thrown. An audit write must not roll back
+ * the user's actual work, but it must not vanish either.
+ */
 async function logAudit(
   supabase: SupabaseServerClient,
   userId: string,
-  action: string,
-  entityType: string,
-  entityId: string | null,
+  action: "insert" | "update" | "delete" | "restore" | "login" | "export",
+  tableName: string,
+  recordId: string | null,
   details: Record<string, unknown>
 ) {
-  await supabase.from("audit_logs").insert({
+  const { error } = await supabase.from("audit_logs").insert({
     user_id: userId,
     action,
-    entity_type: entityType,
-    entity_id: entityId,
-    details,
+    table_name: tableName,
+    record_id: recordId,
+    new_values: details,
   });
+
+  if (error) {
+    console.error("Audit log write failed:", error.message, {
+      action,
+      tableName,
+      recordId,
+    });
+  }
 }
 
 export async function getDocuments(
@@ -47,6 +67,7 @@ export async function getDocuments(
       uploader:profiles!documents_uploaded_by_fkey(full_name)
     `)
     .eq("entity_type", entityType)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (entityId) {
@@ -113,14 +134,12 @@ export async function uploadDocument(formData: FormData) {
   }
 
   // 3. Audit log
-  await logAudit(
-    supabase,
-    currentUser.id,
-    "document_upload",
-    parsed.data.entity_type,
-    parsed.data.entity_id,
-    { document_id: docData.id, file_name: parsed.data.name, size: file.size }
-  );
+  await logAudit(supabase, currentUser.id, "insert", "documents", docData.id, {
+    entity_type: parsed.data.entity_type,
+    entity_id: parsed.data.entity_id,
+    file_name: parsed.data.name,
+    size: file.size,
+  });
 
   // Revalidate relevant path based on entity
   if (parsed.data.entity_id) {
@@ -156,40 +175,31 @@ export async function deleteDocument(id: string) {
     return { error: "Document not found" };
   }
 
+  if (doc.deleted_at) {
+    return { error: "That document has already been removed." };
+  }
+
   // Permission check: only admin/manager or uploader
   if (currentUser.role === "worker" && doc.uploaded_by !== currentUser.id) {
     return { error: "Unauthorized to delete this document" };
   }
 
-  // 2. Remove from Storage
-  if (doc.file_path) {
-    const { error: storageError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .remove([doc.file_path]);
-    
-    if (storageError) {
-      console.error("Storage deletion failed:", storageError);
-      // We proceed to delete from DB anyway to avoid zombie records if storage file is already missing
-    }
-  }
-
-  // 3. Delete from DB
+  // 2. Soft delete. The house rule (§23) is that records are withdrawn, not
+  // destroyed, and the stored file is deliberately left in place — removing it
+  // would make the soft delete unrecoverable and defeat the point.
   const { error: dbError } = await supabase
     .from("documents")
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
 
   if (dbError) return { error: dbError.message };
 
   // 4. Audit Log
-  await logAudit(
-    supabase,
-    currentUser.id,
-    "document_delete",
-    doc.entity_type || "general",
-    doc.entity_id,
-    { document_id: id, file_name: doc.name }
-  );
+  await logAudit(supabase, currentUser.id, "delete", "documents", id, {
+    entity_type: doc.entity_type ?? "general",
+    entity_id: doc.entity_id,
+    file_name: doc.name,
+  });
 
   // Attempt to revalidate
   if (doc.entity_id) {

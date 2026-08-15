@@ -178,6 +178,30 @@ when either code is unknown rather than guessing.
 
 ---
 
+## Phase 7 — Static verification sweep (§23, §29)
+
+**Status: complete.** `npm run verify` green.
+
+Rather than eyeballing, I cross-checked the code against the schema
+mechanically: every `.from()` table, every `.eq/.order/.is/.in` column, and
+every `.insert/.update` payload key against the real column list. Tables and
+filter columns all resolve. Two payload mismatches surfaced, one real:
+
+- **The audit trail was silently empty.** `logAudit` wrote `entity_type`,
+  `entity_id` and `details` — the columns are `table_name`, `record_id`,
+  `new_values` — and passed `action` values (`document_upload`) that the CHECK
+  constraint rejects. Every audit insert failed, and because the result was
+  never inspected, nothing said so. §23 asks for an audit trail; there was
+  none. Fixed, and failures are now logged rather than swallowed.
+- The payroll hit was a false positive from the matcher spanning two
+  statements.
+
+**Documents were hard-deleted** despite having `deleted_at`, against §23. Now a
+soft delete; the stored file is deliberately left in place, since removing it
+would make the soft delete unrecoverable. `getDocuments` filters withdrawn rows.
+
+---
+
 ## Known-remaining (carried forward, not lost)
 
 - **Infrastructure, not code:** Supabase project, Vercel env vars, migrations
