@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getAttendance } from "@/actions/attendance";
+import { getSiteOptions } from "@/actions/sites";
+import { CrewAttendanceSheet } from "@/components/shared/crew-attendance-sheet";
 import { getCurrentUser } from "@/actions/auth";
 import { formatDate, todayInIndia } from "@/lib/format";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
@@ -18,9 +20,15 @@ interface PageProps {
 export default async function AttendancePage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const currentUser = await getCurrentUser();
-  const isAdmin = currentUser?.role === "owner" || currentUser?.role === "manager";
-  
-  if (!isAdmin) {
+
+  // Supervisors and engineers belong here: marking their crew's day is the
+  // job. RLS already limits what each of them can see and write to the sites
+  // they actually run, so the page does not have to guess.
+  const canMarkCrew =
+    currentUser !== null &&
+    ["owner", "manager", "supervisor", "engineer"].includes(currentUser.role);
+
+  if (!canMarkCrew) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">You do not have access to this page.</p>
@@ -31,8 +39,9 @@ export default async function AttendancePage({ searchParams }: PageProps) {
   const today = todayInIndia();
   const dateParam = typeof resolvedParams.date === "string" ? resolvedParams.date : today;
 
-  const [{ data: attendanceData }] = await Promise.all([
+  const [{ data: attendanceData }, { data: sites }] = await Promise.all([
     getAttendance({ date: dateParam }),
+    getSiteOptions(),
   ]);
 
   const presentCount = attendanceData?.filter(a => a.status === "present" || a.status === "half_day").length || 0;
@@ -45,6 +54,8 @@ export default async function AttendancePage({ searchParams }: PageProps) {
         title="Team Attendance" 
         description={`Attendance records for ${formatDate(dateParam, "EEEE, dd MMM yyyy")}`}
       />
+
+      <CrewAttendanceSheet sites={sites ?? []} today={today} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

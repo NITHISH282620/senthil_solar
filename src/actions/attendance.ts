@@ -240,6 +240,83 @@ export async function checkOut() {
   return { error: null };
 }
 
+export interface CrewMember {
+  employee_id: string;
+  full_name: string;
+  employee_code: string;
+  role_on_site: string;
+  /** What is already recorded for this person on this date, if anything. */
+  status: string | null;
+  overtime_hours: number;
+}
+
+/**
+ * The crew assigned to a site, with whatever has already been marked for the
+ * given day. This is the sheet a supervisor fills in standing on site.
+ */
+export async function getCrewForDate(
+  siteId: string,
+  date: string
+): Promise<{ data: CrewMember[] | null; error: string | null }> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { data: null, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  // RLS returns nothing for a site the caller does not run, so an unassigned
+  // supervisor simply gets an empty crew rather than someone else's.
+  const { data: assignments, error } = await supabase
+    .from("site_assignments")
+    .select("employee_id, role_on_site")
+    .eq("site_id", siteId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
+
+  if (error) return { data: null, error: error.message };
+
+  const rows = (assignments ?? []) as { employee_id: string; role_on_site: string }[];
+  if (rows.length === 0) return { data: [], error: null };
+
+  const ids = rows.map((r) => r.employee_id);
+
+  const [{ data: people }, { data: marked }] = await Promise.all([
+    supabase.from("v_directory").select("id, full_name, employee_code").in("id", ids),
+    supabase
+      .from("attendance")
+      .select("employee_id, status, overtime_hours")
+      .eq("site_id", siteId)
+      .eq("date", date)
+      .is("deleted_at", null),
+  ]);
+
+  const nameById = new Map(
+    ((people ?? []) as { id: string; full_name: string; employee_code: string }[]).map(
+      (p) => [p.id, p]
+    )
+  );
+  const markedById = new Map(
+    ((marked ?? []) as { employee_id: string; status: string; overtime_hours: number }[]).map(
+      (m) => [m.employee_id, m]
+    )
+  );
+
+  return {
+    data: rows.map((r) => {
+      const person = nameById.get(r.employee_id);
+      const existing = markedById.get(r.employee_id);
+      return {
+        employee_id: r.employee_id,
+        full_name: person?.full_name ?? "Unknown",
+        employee_code: person?.employee_code ?? "",
+        role_on_site: r.role_on_site,
+        status: existing?.status ?? null,
+        overtime_hours: Number(existing?.overtime_hours ?? 0),
+      };
+    }),
+    error: null,
+  };
+}
+
 /**
  * Mark a whole crew's day at one site, in one call.
  *

@@ -11,6 +11,8 @@ export type ContractMilestone = Database["public"]["Tables"]["contract_milestone
 export type Site = Database["public"]["Tables"]["sites"]["Row"];
 export type SiteStage = Database["public"]["Tables"]["site_stages"]["Row"];
 export type SiteAssignment = Database["public"]["Tables"]["site_assignments"]["Row"];
+/** allocated_value lives here, not on sites: field roles read the site but not what it is worth. */
+export type SiteCommercial = Database["public"]["Tables"]["site_commercials"]["Row"];
 export type SiteEvent = Database["public"]["Tables"]["site_events"]["Row"];
 export type Quotation = Database["public"]["Tables"]["quotations"]["Row"];
 export type QuotationItem = Database["public"]["Tables"]["quotation_items"]["Row"];

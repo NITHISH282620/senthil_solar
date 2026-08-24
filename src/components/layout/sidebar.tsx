@@ -68,7 +68,18 @@ const navItems: NavItem[] = [
     icon: Wallet,
     roles: ["owner", "manager", "accountant"],
   },
-  { title: "Attendance", href: "/attendance", icon: CalendarCheck },
+  {
+    title: "Attendance",
+    href: "/attendance",
+    icon: CalendarCheck,
+    roles: ["owner", "manager", "supervisor", "engineer"],
+  },
+  {
+    title: "My Attendance",
+    href: "/attendance/my-attendance",
+    icon: CalendarCheck,
+    roles: ["worker", "store_manager", "accountant"],
+  },
   { title: "Expenses", href: "/expenses", icon: Receipt },
   {
     title: "Billing",

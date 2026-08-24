@@ -3566,12 +3566,37 @@ export type Database = {
         }
         Relationships: []
       }
+      site_commercials: {
+        Row: {
+          allocated_value: number
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          allocated_value?: number
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          allocated_value?: number
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_commercials_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sites: {
         Row: {
           actual_end_date: string | null
           actual_start_date: string | null
           address: string | null
-          allocated_value: number
           capacity_kw: number | null
           client_contact_id: string | null
           company_id: string
@@ -3607,7 +3632,6 @@ export type Database = {
           actual_end_date?: string | null
           actual_start_date?: string | null
           address?: string | null
-          allocated_value?: number
           capacity_kw?: number | null
           client_contact_id?: string | null
           company_id: string
@@ -3643,7 +3667,6 @@ export type Database = {
           actual_end_date?: string | null
           actual_start_date?: string | null
           address?: string | null
-          allocated_value?: number
           capacity_kw?: number | null
           client_contact_id?: string | null
           company_id?: string
