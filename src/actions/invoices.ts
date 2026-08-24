@@ -521,6 +521,194 @@ export async function addPayment(formData: FormData) {
  * the invoice trigger only counts rows with deleted_at IS NULL, so soft
  * deletion is what restores the balance.
  */
+export interface ClientCredit {
+  company_id: string;
+  company_name: string;
+  company_code: string;
+  credit_available: number;
+  credit_entries: number;
+  oldest_credit_date: string;
+}
+
+/**
+ * Money clients have paid that is not yet set against any invoice.
+ *
+ * This exists because the alternative was worse than losing the money: it was
+ * recorded, in the cash book and in the bank, but surfaced on no screen and in
+ * no report. The owner would bill a client again for money he already held.
+ */
+export async function getClientCredits(): Promise<{
+  data: ClientCredit[] | null;
+  error: string | null;
+}> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager", "accountant"].includes(currentUser.role)) {
+    return { data: null, error: "Unauthorized" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("v_client_credit")
+    .select("*")
+    .order("credit_available", { ascending: false });
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as ClientCredit[], error: null };
+}
+
+export interface CreditEntry {
+  payment_id: string;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  reference_number: string | null;
+  notes: string | null;
+}
+
+/** The individual receipts making up a client's credit. */
+export async function getClientCreditDetail(companyId: string): Promise<{
+  data: CreditEntry[] | null;
+  error: string | null;
+}> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager", "accountant"].includes(currentUser.role)) {
+    return { data: null, error: "Unauthorized" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("v_client_credit_detail")
+    .select("payment_id, amount, payment_date, payment_method, reference_number, notes")
+    .eq("company_id", companyId)
+    .order("payment_date");
+
+  if (error) return { data: null, error: error.message };
+  return { data: data as CreditEntry[], error: null };
+}
+
+/**
+ * Set a client's unallocated credit against one of their invoices.
+ *
+ * Allocation re-points the existing receipt rather than creating a new one:
+ * the cash arrived once and must appear in the cash book once. Where the credit
+ * is larger than the invoice can absorb, the row is split so the remainder
+ * stays on account.
+ */
+export async function applyCreditToInvoice(paymentId: string, invoiceId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager", "accountant"].includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner, a manager or an accountant can allocate credit." };
+  }
+
+  const supabase = await createClient();
+
+  const [{ data: credit, error: creditError }, { data: invoice, error: invoiceError }] =
+    await Promise.all([
+      supabase
+        .from("payments")
+        .select("id, company_id, amount, payment_date, payment_method, bank_account_id, reference_number, notes")
+        .eq("id", paymentId)
+        .is("invoice_id", null)
+        .is("deleted_at", null)
+        .eq("direction", "inbound")
+        .single(),
+      supabase
+        .from("invoices")
+        .select("id, company_id, contract_id, balance_due, invoice_number, status")
+        .eq("id", invoiceId)
+        .is("deleted_at", null)
+        .single(),
+    ]);
+
+  if (creditError || !credit) return { error: "That credit entry no longer exists." };
+  if (invoiceError || !invoice) return { error: "Invoice not found." };
+
+  const c = credit as {
+    company_id: string;
+    amount: number;
+    payment_date: string;
+    payment_method: string;
+    bank_account_id: string | null;
+    reference_number: string | null;
+    notes: string | null;
+  };
+  const inv = invoice as {
+    company_id: string;
+    contract_id: string | null;
+    balance_due: number;
+    invoice_number: string;
+    status: string;
+  };
+
+  // Credit belongs to the client who paid it. Moving it between clients would
+  // silently rewrite two account balances.
+  if (c.company_id !== inv.company_id) {
+    return { error: "That credit belongs to a different client." };
+  }
+  if (inv.status === "cancelled") {
+    return { error: "This invoice is cancelled." };
+  }
+
+  const balance = Number(inv.balance_due);
+  if (balance <= 0) {
+    return { error: `${inv.invoice_number} is already settled.` };
+  }
+
+  const creditAmount = Number(c.amount);
+  const applied = Math.min(creditAmount, balance);
+  const remainder = Math.round((creditAmount - applied) * 100) / 100;
+
+  if (remainder > 0) {
+    // Split: shrink the credit to what stays on account, and write the applied
+    // portion against the invoice.
+    const { error: shrinkError } = await supabase
+      .from("payments")
+      .update({ amount: remainder })
+      .eq("id", paymentId);
+
+    if (shrinkError) return { error: shrinkError.message };
+
+    const { error: applyError } = await supabase.from("payments").insert({
+      invoice_id: invoiceId,
+      company_id: inv.company_id,
+      contract_id: inv.contract_id,
+      bank_account_id: c.bank_account_id,
+      direction: "inbound",
+      amount: applied,
+      payment_date: c.payment_date,
+      payment_method: c.payment_method,
+      reference_number: c.reference_number,
+      notes: `Credit applied to ${inv.invoice_number}`,
+      received_by: currentUser.id,
+      created_by: currentUser.id,
+    });
+
+    if (applyError) {
+      // Restore the credit so the client's balance is never understated.
+      await supabase.from("payments").update({ amount: creditAmount }).eq("id", paymentId);
+      return { error: applyError.message };
+    }
+  } else {
+    // The whole credit fits: point it at the invoice. No new cash movement, so
+    // no cash-book entry — the money was banked when it arrived.
+    const { error } = await supabase
+      .from("payments")
+      .update({
+        invoice_id: invoiceId,
+        contract_id: inv.contract_id,
+        notes: `${c.notes ? c.notes + " · " : ""}Credit applied to ${inv.invoice_number}`,
+      })
+      .eq("id", paymentId);
+
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/billing");
+  revalidatePath(`/billing/${invoiceId}`);
+  revalidatePath("/dashboard");
+  return { error: null };
+}
+
 export async function deletePayment(id: string) {
   const currentUser = await getCurrentUser();
   if (!currentUser || !["owner", "accountant"].includes(currentUser.role)) {

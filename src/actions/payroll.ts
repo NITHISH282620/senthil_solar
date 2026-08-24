@@ -348,13 +348,35 @@ export async function generatePayroll(month: number, year: number) {
       bySite.set(a.site_id, acc);
     }
 
-    for (const [siteId, acc] of bySite) {
+    // THE INVARIANT: the site allocations for a line sum to exactly that
+    // line's labour cost. Rounding each share independently breaks it — a
+    // person on three sites at Rs 1,000 gives 333.33 x 3 = 999.99, and the
+    // missing paisa means site P&L never quite reconciles to payroll. Multiply
+    // that across a month of crews and the discrepancy is real money that
+    // belongs to no site.
+    //
+    // So the shares are rounded and the remainder is given to the largest of
+    // them, which is the conventional treatment and keeps the sum exact.
+    const sites = [...bySite.entries()];
+    const shares = sites.map(([siteId, acc]) => ({
+      siteId,
+      acc,
+      amount: round2((payable * acc.days) / totalDays),
+    }));
+
+    const drift = round2(payable - shares.reduce((sum, sh) => sum + sh.amount, 0));
+    if (drift !== 0 && shares.length > 0) {
+      const biggest = shares.reduce((a, b) => (b.amount > a.amount ? b : a));
+      biggest.amount = round2(biggest.amount + drift);
+    }
+
+    for (const share of shares) {
       allocations.push({
         payroll_line_id: lineId,
-        site_id: siteId,
-        days_worked: acc.days,
-        overtime_hours: acc.ot,
-        allocated_amount: round2((payable * acc.days) / totalDays),
+        site_id: share.siteId,
+        days_worked: share.acc.days,
+        overtime_hours: share.acc.ot,
+        allocated_amount: share.amount,
       });
     }
   }

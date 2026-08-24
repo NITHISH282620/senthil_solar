@@ -7,8 +7,9 @@ import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PaymentModalWrapper } from "@/components/shared/payment-modal-wrapper";
 import { InvoiceActions } from "@/components/shared/invoice-actions";
+import { ApplyCredit } from "@/components/shared/apply-credit";
 import { DocumentVault } from "@/components/shared/document-vault";
-import { getInvoice } from "@/actions/invoices";
+import { getInvoice, getClientCreditDetail } from "@/actions/invoices";
 import { getDocuments } from "@/actions/documents";
 import { getCompanySettings } from "@/actions/settings";
 import { getCurrentUser } from "@/actions/auth";
@@ -36,6 +37,12 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
     getDocuments("invoice", id),
     getCurrentUser(),
   ]);
+
+  // Credit this client is already holding with us, so an unpaid invoice can be
+  // settled from money that has arrived rather than chased twice.
+  const { data: credits } = invoiceRes.data?.company_id
+    ? await getClientCreditDetail(invoiceRes.data.company_id)
+    : { data: null };
   
   const invoice = invoiceRes.data;
   const settings = settingsRes.data;
@@ -85,6 +92,14 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      {canEdit ? (
+        <ApplyCredit
+          invoiceId={invoice.id}
+          credits={credits ?? []}
+          balanceDue={Number(invoice.balance_due ?? 0)}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
