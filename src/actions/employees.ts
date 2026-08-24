@@ -106,14 +106,40 @@ export async function createEmployee(formData: FormData) {
   // Use admin client to create auth user (bypasses RLS)
   const adminSupabase = createAdminClient();
 
+  const email = v.email.trim().toLowerCase();
+
+  // The database refuses any auth.users insert without an unconsumed
+  // invitation, which is what makes public self-registration impossible even
+  // if the platform's signup switch is flipped back on. Record the owner's
+  // authorisation first; the trigger consumes it as the account is created.
+  const { error: inviteError } = await adminSupabase
+    .from("employee_invitations")
+    .upsert(
+      {
+        email,
+        invited_by: currentUser.id,
+        intended_role: v.role,
+        consumed_at: null,
+      },
+      { onConflict: "email" },
+    );
+
+  if (inviteError) {
+    return { data: null, error: `Could not authorise the account: ${inviteError.message}` };
+  }
+
   const { data: authData, error: authError } =
     await adminSupabase.auth.admin.createUser({
-      email: v.email,
+      email,
       password: v.password,
       email_confirm: true,
+      user_metadata: { full_name: v.full_name },
     });
 
   if (authError) {
+    // Withdraw the authorisation rather than leaving an open invitation behind
+    // for an account that was never created.
+    await adminSupabase.from("employee_invitations").delete().eq("email", email);
     return { data: null, error: authError.message };
   }
 
@@ -219,6 +245,12 @@ export async function updateEmployee(id: string, formData: FormData) {
     return { error: error.message };
   }
 
+  // This form can deactivate someone too, so sign-in has to follow it here as
+  // well — otherwise the two paths disagree about whether a leaver can log in.
+  if (currentUser.role === "owner" && typeof updates.is_active === "boolean") {
+    await setAuthAccess(id, updates.is_active as boolean);
+  }
+
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);
   return { error: null };
@@ -233,19 +265,55 @@ export async function toggleEmployeeStatus(id: string, isActive: boolean) {
     return { error: "Unauthorized." };
   }
 
+  if (id === currentUser.id && !isActive) {
+    return { error: "You cannot deactivate your own account." };
+  }
+
   const supabase = await createClient();
 
   const { error } = await supabase
     .from("profiles")
-    .update({ is_active: isActive, updated_at: new Date().toISOString() })
+    .update({ is_active: isActive })
     .eq("id", id);
 
   if (error) {
     return { error: error.message };
   }
 
+  // Deactivating the profile removes every permission — auth_role() requires
+  // is_active — but GoTrue knows nothing about the profile, so the person could
+  // still sign in and hold a valid session against an app that showed them a
+  // shell with no data in it. Someone who has left the company should be turned
+  // away at the door, so the auth account is banned in step with the profile.
+  await setAuthAccess(id, isActive);
+
   revalidatePath("/employees");
+  revalidatePath(`/employees/${id}`);
   return { error: null };
+}
+
+/**
+ * Allow or deny sign-in for an account, in step with its profile.
+ *
+ * Failures are reported but not thrown: the profile change is the security
+ * boundary that actually matters — every RLS helper gates on is_active — and
+ * rolling it back because the auth side is briefly unavailable would leave a
+ * departed employee with their permissions intact.
+ */
+async function setAuthAccess(userId: string, allowed: boolean) {
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      // "none" clears an existing ban; a long horizon is how GoTrue expresses
+      // an indefinite one.
+      ban_duration: allowed ? "none" : "876000h",
+    });
+    if (error) {
+      console.error("[employees] could not update auth access", error.message);
+    }
+  } catch (cause) {
+    console.error("[employees] admin client unavailable for ban toggle", cause);
+  }
 }
 
 /**

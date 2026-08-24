@@ -86,5 +86,19 @@ export async function getCurrentUser(): Promise<Profile | null> {
     redirect("/unauthorized");
   }
 
-  return profile as Profile;
+  const p = profile as Profile;
+
+  // A dormant or removed account has no permissions — every RLS helper gates on
+  // is_active, so auth_role() returns NULL and each query comes back empty. That
+  // was letting someone who had left the company hold a live session and wander
+  // an application full of blank screens, which reads as a broken product rather
+  // than as a closed door. Turn them away instead.
+  //
+  // This also covers the interval before a ban takes effect, and any account
+  // that reached auth.users by a route the invitation guard does not cover.
+  if (!p.is_active || p.deleted_at !== null) {
+    redirect("/unauthorized");
+  }
+
+  return p;
 }
