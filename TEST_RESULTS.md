@@ -6,15 +6,20 @@ concluded by reading code alone; every defect has a reproduction that was
 executed and every fix was re-executed afterwards.
 
 ```
-ROLES TESTED            8 / 8
-WORKFLOWS TESTED       24
-EDGE CASES             61
-SECURITY TESTS         38
-DEFECTS FOUND          22
-DEFECTS FIXED          22
-KNOWN GAPS (not built)  8
-PRODUCTION BLOCKERS     0 remaining (4 found, 4 fixed)
+ROLES TESTED                    8 / 8
+WORKFLOWS EXERCISED            24
+READ-VISIBILITY PROBES        312   (8 roles x 39 table/view reads)
+WRITE / AUTHORISATION ASSERTS  56   (each in its own transaction)
+BUSINESS EDGE CASES            28
+DEFECTS FOUND                  22
+DEFECTS FIXED                  22
+GAPS FOUND, NOT BUILT           8
+PRODUCTION BLOCKERS             4 found, 4 fixed in code
+                                1 remaining in deployment config
 ```
+
+Counts are of assertions actually executed against the database, not of
+scenarios considered.
 
 ## A note on method
 
