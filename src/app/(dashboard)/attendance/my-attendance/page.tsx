@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getAttendance, getMyAssignedSites } from "@/actions/attendance";
 import { getCurrentUser } from "@/actions/auth";
-import { formatDate } from "@/lib/format";
+import { formatDate, todayInIndia } from "@/lib/format";
 import type { Metadata } from "next";
 import { CheckInOutButton } from "./check-in-out-button";
 
@@ -31,7 +31,7 @@ export default async function MyAttendancePage({ searchParams }: PageProps) {
     ]);
 
   // Check if they checked in today
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayInIndia();
   const todayRecord = attendanceData?.find(a => a.date === today);
 
   const presentDays = attendanceData?.filter(a => a.status === "present" || a.status === "half_day").length || 0;

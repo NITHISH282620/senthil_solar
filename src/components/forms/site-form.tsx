@@ -20,7 +20,7 @@ import { createSite, updateSite } from "@/actions/sites";
 import type { Site } from "@/types/database";
 
 interface SiteFormProps {
-  initialData?: Site | null;
+  initialData?: (Site & { commercial?: { allocated_value: number } | null }) | null;
   contracts: { id: string; contract_number: string; title: string }[];
   stages: { code: string; label: string }[];
   people: { id: string; full_name: string }[];
@@ -179,7 +179,7 @@ export function SiteForm({
               type="number"
               step="0.01"
               min="0"
-              defaultValue={initialData?.allocated_value ?? 0}
+              defaultValue={initialData?.commercial?.allocated_value ?? 0}
             />
             <p className="text-xs text-muted-foreground">
               This site&apos;s share of the contract. Drives its profit figure.

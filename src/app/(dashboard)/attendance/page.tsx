@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getAttendance } from "@/actions/attendance";
 import { getCurrentUser } from "@/actions/auth";
-import { formatDate } from "@/lib/format";
+import { formatDate, todayInIndia } from "@/lib/format";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 
@@ -28,7 +28,7 @@ export default async function AttendancePage({ searchParams }: PageProps) {
     );
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayInIndia();
   const dateParam = typeof resolvedParams.date === "string" ? resolvedParams.date : today;
 
   const [{ data: attendanceData }] = await Promise.all([

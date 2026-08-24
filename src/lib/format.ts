@@ -74,3 +74,23 @@ export function formatCompactNumber(num: number): string {
     maximumFractionDigits: 1,
   }).format(num);
 }
+
+/**
+ * Today's date in Asia/Kolkata, as YYYY-MM-DD.
+ *
+ * `new Date().toISOString().slice(0, 10)` is the UTC date, and IST runs 5h30
+ * ahead of it. Every date the database derives itself uses
+ * `(now() AT TIME ZONE 'Asia/Kolkata')::date`, so between midnight and 05:30
+ * IST the two disagreed: the dashboard's "cash in today" and the cash page's
+ * own total were computed for different days, and an early-morning site
+ * check-in — normal on solar sites, where crews start before the heat — was
+ * filed against the previous day.
+ */
+export function todayInIndia(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

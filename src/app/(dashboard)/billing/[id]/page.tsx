@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PaymentModalWrapper } from "@/components/shared/payment-modal-wrapper";
+import { InvoiceActions } from "@/components/shared/invoice-actions";
 import { DocumentVault } from "@/components/shared/document-vault";
 import { getInvoice } from "@/actions/invoices";
 import { getDocuments } from "@/actions/documents";
@@ -62,8 +63,15 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
           </p>
         </div>
         
-        <div className="flex gap-2">
-          {canEdit && !isPaid && (
+        <div className="flex gap-2 flex-wrap">
+          <InvoiceActions
+            invoiceId={invoice.id}
+            currentStatus={invoice.status}
+            amountReceived={Number(invoice.amount_received ?? 0)}
+            userRole={currentUser?.role ?? ""}
+          />
+
+          {canEdit && !isPaid && invoice.status !== "cancelled" && (
             <PaymentModalWrapper invoiceId={invoice.id} balanceDue={invoice.balance_due ?? 0} />
           )}
           

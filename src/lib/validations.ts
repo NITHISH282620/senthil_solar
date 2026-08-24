@@ -604,6 +604,10 @@ export const companySettingsSchema = z.object({
   email: emailSchema,
   gst_number: optionalText(20),
   pan_number: optionalText(10),
+  // Place of supply for our own side of every invoice: state_code is what
+  // decides CGST+SGST vs IGST, so it has to be editable.
+  state: optionalText(100),
+  state_code: optionalText(2),
   invoice_prefix: z.string().max(10).default("INV"),
   quotation_prefix: z.string().max(10).default("QT"),
   expense_prefix: z.string().max(10).default("EXP"),
@@ -620,7 +624,7 @@ export const companySettingsSchema = z.object({
     .default("17:00"),
   ot_after_hours: z.coerce.number().min(1).max(24).default(8),
   financial_year_start_month: z.coerce.number().int().min(1).max(12).default(4),
-  default_geofence_radius: z.coerce.number().min(10).default(500),
+  default_geofence_radius_m: z.coerce.number().min(10).default(500),
 });
 
 // ─── Documents ───────────────────────────────────────────

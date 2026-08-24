@@ -19,7 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createEmployee, updateEmployee } from "@/actions/employees";
-import { ROLE_OPTIONS } from "@/lib/constants";
+import { ROLE_OPTIONS, EMPLOYEE_TYPES } from "@/lib/constants";
 import type { Profile } from "@/types/database";
 
 interface EmployeeFormProps {
@@ -127,7 +127,7 @@ export function EmployeeForm({
               <Label htmlFor="role">Role *</Label>
               <Select
                 name="role"
-                defaultValue={employee?.role ?? "employee"}
+                defaultValue={employee?.role ?? "worker"}
                 disabled={loading}
               >
                 <SelectTrigger id="role">
@@ -157,6 +157,94 @@ export function EmployeeForm({
           </div>
         </CardContent>
       </Card>
+
+      {/* Compensation (Admin only) — payroll reads these columns directly, so
+          an employee created without them earns zero on every payroll run. */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Compensation</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="employee_type">Pay Basis *</Label>
+              <Select
+                name="employee_type"
+                defaultValue={
+                  employee?.wage_mode === "monthly"
+                    ? "monthly_salary"
+                    : "daily_wage"
+                }
+                disabled={loading}
+              >
+                <SelectTrigger id="employee_type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMPLOYEE_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date_of_joining">Date of Joining</Label>
+              <Input
+                id="date_of_joining"
+                name="date_of_joining"
+                type="date"
+                defaultValue={employee?.date_of_joining ?? ""}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="daily_rate">Daily Rate (₹)</Label>
+              <Input
+                id="daily_rate"
+                name="daily_rate"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={employee?.daily_rate ?? ""}
+                placeholder="e.g. 750"
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="monthly_salary">Monthly Salary (₹)</Label>
+              <Input
+                id="monthly_salary"
+                name="monthly_salary"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={employee?.monthly_salary ?? ""}
+                placeholder="e.g. 25000"
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ot_rate_per_hour">OT Rate / Hour (₹)</Label>
+              <Input
+                id="ot_rate_per_hour"
+                name="ot_rate_per_hour"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={employee?.ot_rate_per_hour ?? ""}
+                placeholder="e.g. 120"
+                disabled={loading}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Status (Edit only, Admin only) */}
       {isEdit && isAdmin && (

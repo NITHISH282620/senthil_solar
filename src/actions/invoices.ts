@@ -100,7 +100,8 @@ export async function getInvoice(
       contract:contracts!invoices_contract_id_fkey(id, contract_number, title),
       items:invoice_items(*),
       payments(
-        *
+        *,
+        received_by_profile:profiles!payments_received_by_fkey(full_name)
       )
     `)
     .eq("id", id)
@@ -134,7 +135,11 @@ export async function createInvoice(formData: FormData) {
   const gst_percent = Number(formData.get("gst_percent") || 18);
   const discount_amount = Number(formData.get("discount_amount") || 0);
   const itemsStr = formData.get("items") as string;
-  
+  // Both are collected by the form; without reading them here the due date was
+  // dropped on every invoice, which left ageing and overdue tracking blind.
+  const due_date = (formData.get("due_date") as string) || null;
+  const notes = (formData.get("notes") as string) || null;
+
   if (!company_id || !itemsStr) {
     return { data: null, error: "Missing required fields" };
   }
@@ -188,6 +193,8 @@ export async function createInvoice(formData: FormData) {
     invoice_number,
     company_id,
     contract_id: contract_id || null,
+    due_date,
+    notes,
     subtotal,
     discount_amount,
     place_of_supply_state_code: clientStateCode,
@@ -231,6 +238,116 @@ export async function createInvoice(formData: FormData) {
 
   revalidatePath("/billing");
   return { data, error: null };
+}
+
+/**
+ * Issue a draft invoice to the client.
+ *
+ * Until this existed there was no transition out of 'draft' anywhere in the
+ * application, and every invoice was created as a draft. Three reports read
+ * only non-draft invoices — v_receivables_ageing, the dashboard's
+ * total_outstanding and its overdue count — so the owner's single most
+ * important question, "who owes me money?", always answered zero however many
+ * invoices had been raised.
+ */
+export async function issueInvoice(id: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager", "accountant"].includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner, a manager or an accountant can issue an invoice." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: invoice, error: fetchError } = await supabase
+    .from("invoices")
+    .select("id, status, due_date, total_amount")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .single();
+
+  if (fetchError || !invoice) return { error: "Invoice not found." };
+
+  const inv = invoice as {
+    status: string;
+    due_date: string | null;
+    total_amount: number;
+  };
+
+  if (inv.status !== "draft") {
+    return { error: `This invoice is already ${inv.status}.` };
+  }
+  if (Number(inv.total_amount) <= 0) {
+    return { error: "An invoice with no value cannot be issued." };
+  }
+
+  // An invoice with no due date can never age, so ageing would stay blind in a
+  // different way. Default to the 30 days the trade works on.
+  const dueDate =
+    inv.due_date ??
+    new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+
+  const { error } = await supabase
+    .from("invoices")
+    .update({ status: "sent", due_date: dueDate })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/billing");
+  revalidatePath(`/billing/${id}`);
+  revalidatePath("/dashboard");
+  return { error: null };
+}
+
+/**
+ * Cancel an invoice raised in error. Cancelling is not deleting: the number
+ * stays allocated, because GST numbering must not have holes in it.
+ */
+export async function cancelInvoice(id: string, reason: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager"].includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner or a manager can cancel an invoice." };
+  }
+
+  if (!reason.trim()) {
+    return { error: "Give a reason for cancelling this invoice." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: invoice, error: fetchError } = await supabase
+    .from("invoices")
+    .select("id, status, amount_received, notes")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .single();
+
+  if (fetchError || !invoice) return { error: "Invoice not found." };
+
+  const inv = invoice as { status: string; amount_received: number; notes: string | null };
+
+  if (Number(inv.amount_received) > 0) {
+    return {
+      error:
+        "Money has already been received against this invoice. Reverse the payments first.",
+    };
+  }
+  if (inv.status === "cancelled") return { error: "This invoice is already cancelled." };
+
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      status: "cancelled",
+      notes: `${inv.notes ? inv.notes + "\n" : ""}Cancelled: ${reason.trim()}`,
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/billing");
+  revalidatePath(`/billing/${id}`);
+  revalidatePath("/dashboard");
+  return { error: null };
 }
 
 export async function deleteInvoice(id: string) {
@@ -296,6 +413,24 @@ export async function addPayment(formData: FormData) {
     invoice_number: string;
   };
 
+  // A client who transfers more than the invoice owes is a real and common
+  // event — a rounded-up round figure, or one transfer covering the next bill
+  // too. The database refuses a payment larger than the balance, so before
+  // this the money physically sat in the bank while the books denied it
+  // existed. Settle the invoice with what it can absorb and carry the rest as
+  // an unallocated credit on the client's account, which is what an
+  // accountant would do by hand.
+  const balanceDue = Number(inv.balance_due);
+  const settles = Math.min(v.amount, balanceDue);
+  const onAccount = Math.round((v.amount - settles) * 100) / 100;
+
+  if (settles <= 0) {
+    return {
+      data: null,
+      error: "This invoice is already fully settled. Record the money as a client advance instead.",
+    };
+  }
+
   const { data, error } = await supabase
     .from("payments")
     .insert({
@@ -304,7 +439,7 @@ export async function addPayment(formData: FormData) {
       contract_id: inv.contract_id,
       bank_account_id: v.bank_account_id || null,
       direction: "inbound",
-      amount: v.amount,
+      amount: settles,
       payment_date: v.payment_date,
       payment_method: v.payment_method,
       reference_number: v.reference_number,
@@ -322,19 +457,47 @@ export async function addPayment(formData: FormData) {
 
   const payment = data as { id: string };
 
+  // The excess is attached to the client, not to any invoice, so it shows up
+  // as credit to set against their next bill.
+  if (onAccount > 0) {
+    const { error: creditError } = await supabase.from("payments").insert({
+      invoice_id: null,
+      company_id: inv.company_id,
+      contract_id: inv.contract_id,
+      bank_account_id: v.bank_account_id || null,
+      direction: "inbound",
+      amount: onAccount,
+      payment_date: v.payment_date,
+      payment_method: v.payment_method,
+      reference_number: v.reference_number,
+      notes: `Overpayment on ${inv.invoice_number}, held on account.${v.notes ? " " + v.notes : ""}`,
+      received_by: currentUser.id,
+      created_by: currentUser.id,
+    });
+
+    if (creditError) {
+      await supabase.from("payments").delete().eq("id", payment.id);
+      return { data: null, error: `Overpayment could not be held on account: ${creditError.message}` };
+    }
+  }
+
   // Mirror into the cash book. cash_book requires either a site or the office
   // flag, and only accepts cash/upi/bank/card.
   const { error: cashError } = await supabase.from("cash_book").insert({
     entry_date: v.payment_date,
     direction: "in",
-    amount: v.amount,
+    // The full amount landed in the account, settlement and credit together.
+    amount: settles + onAccount,
     payment_mode: CASH_BOOK_MODE[v.payment_method],
     bank_account_id: v.bank_account_id || null,
     site_id: inv.site_id,
     contract_id: inv.contract_id,
     company_id: inv.company_id,
     is_office: inv.site_id === null,
-    description: `Payment received against invoice ${inv.invoice_number}`,
+    description:
+      onAccount > 0
+        ? `Payment received against invoice ${inv.invoice_number} (₹${onAccount.toFixed(2)} held on account)`
+        : `Payment received against invoice ${inv.invoice_number}`,
     reference_table: "payments",
     reference_id: payment.id,
     handled_by: currentUser.id,

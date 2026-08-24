@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
 import { siteSchema, parseFormData, sanitizeSearchInput } from "@/lib/validations";
 import type { Site, Company, Contract } from "@/types/database";
+import { todayInIndia } from "@/lib/format";
 
 const WRITE_ROLES = ["owner", "manager"];
 
@@ -13,6 +14,11 @@ export interface SiteWithRelations extends Site {
   contract?: Pick<Contract, "id" | "contract_number" | "title"> | null;
   engineer?: { id: string; full_name: string } | null;
   supervisor?: { id: string; full_name: string } | null;
+  /**
+   * The site's share of the contract value. Null for field roles — RLS on
+   * site_commercials hides it, which is the point of the separate table.
+   */
+  commercial?: { allocated_value: number } | null;
 }
 
 /** Minimal shape for the site pickers that appear on every money form. */
@@ -42,7 +48,8 @@ export async function getSites(params?: {
        company:companies(id, name, company_code),
        contract:contracts(id, contract_number, title),
        engineer:profiles!sites_site_engineer_id_fkey(id, full_name),
-       supervisor:profiles!sites_supervisor_id_fkey(id, full_name)`
+       supervisor:profiles!sites_supervisor_id_fkey(id, full_name),
+       commercial:site_commercials(allocated_value)`
     )
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
@@ -79,7 +86,8 @@ export async function getSite(
        company:companies(id, name, company_code),
        contract:contracts(id, contract_number, title),
        engineer:profiles!sites_site_engineer_id_fkey(id, full_name),
-       supervisor:profiles!sites_supervisor_id_fkey(id, full_name)`
+       supervisor:profiles!sites_supervisor_id_fkey(id, full_name),
+       commercial:site_commercials(allocated_value)`
     )
     .eq("id", id)
     .single();
@@ -160,10 +168,13 @@ export async function createSite(formData: FormData) {
     return { data: null, error: `Could not allocate a site code: ${seqError.message}` };
   }
 
+  // allocated_value lives in site_commercials, which field roles cannot read.
+  const { allocated_value, ...siteFields } = parsed.data;
+
   const { data, error } = await supabase
     .from("sites")
     .insert({
-      ...parsed.data,
+      ...siteFields,
       site_code: siteCode as string,
       company_id: (contract as { company_id: string }).company_id,
       created_by: currentUser.id,
@@ -172,6 +183,16 @@ export async function createSite(formData: FormData) {
     .single();
 
   if (error) return { data: null, error: error.message };
+
+  // A trigger already created the commercial row at zero; set the real value.
+  const { error: commercialError } = await supabase
+    .from("site_commercials")
+    .update({ allocated_value })
+    .eq("site_id", (data as { id: string }).id);
+
+  if (commercialError) {
+    return { data: null, error: `Site created but its value could not be set: ${commercialError.message}` };
+  }
 
   revalidatePath("/sites");
   revalidatePath(`/contracts/${parsed.data.contract_id}`);
@@ -189,8 +210,16 @@ export async function updateSite(id: string, formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.from("sites").update(parsed.data).eq("id", id);
+  const { allocated_value, ...siteFields } = parsed.data;
+
+  const { error } = await supabase.from("sites").update(siteFields).eq("id", id);
   if (error) return { error: error.message };
+
+  const { error: commercialError } = await supabase
+    .from("site_commercials")
+    .upsert({ site_id: id, allocated_value }, { onConflict: "site_id" });
+
+  if (commercialError) return { error: commercialError.message };
 
   revalidatePath("/sites");
   revalidatePath(`/sites/${id}`);
@@ -221,7 +250,7 @@ export async function updateSiteStage(
     updates.progress_percent = Math.max(0, Math.min(100, progressPercent));
   }
   if (stage === "completed") {
-    updates.actual_end_date = new Date().toISOString().slice(0, 10);
+    updates.actual_end_date = todayInIndia();
   }
 
   const { error } = await supabase.from("sites").update(updates).eq("id", id);
@@ -257,16 +286,37 @@ export async function getSiteAssignments(siteId: string): Promise<{
 
   const { data, error } = await supabase
     .from("site_assignments")
-    .select(
-      "id, employee_id, role_on_site, assigned_date, employee:profiles(id, full_name, employee_code)"
-    )
+    .select("id, employee_id, role_on_site, assigned_date")
     .eq("site_id", siteId)
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("assigned_date", { ascending: false });
 
   if (error) return { data: null, error: error.message };
-  return { data: data as unknown as SiteAssignmentRow[], error: null };
+
+  const rows = (data ?? []) as Omit<SiteAssignmentRow, "employee">[];
+  if (rows.length === 0) return { data: [], error: null };
+
+  // Names come from v_directory, not from an embedded profiles join. RLS on
+  // profiles admits only yourself and the back office, so the embed returned
+  // NULL for a supervisor and the crew list rendered as a column of blanks —
+  // leaving the one person who has to identify these workers unable to.
+  // v_directory carries no pay, banking or KYC, so widening it is safe.
+  const { data: people } = await supabase
+    .from("v_directory")
+    .select("id, full_name, employee_code")
+    .in("id", rows.map((r) => r.employee_id));
+
+  const byId = new Map(
+    ((people ?? []) as { id: string; full_name: string; employee_code: string }[]).map(
+      (p) => [p.id, p]
+    )
+  );
+
+  return {
+    data: rows.map((r) => ({ ...r, employee: byId.get(r.employee_id) ?? null })),
+    error: null,
+  };
 }
 
 /** Matches site_assignments_write, which gates on auth_is_back_office(). */
@@ -309,7 +359,7 @@ export async function assignToSite(
         is_active: true,
         removed_date: null,
         role_on_site: roleOnSite,
-        assigned_date: new Date().toISOString().slice(0, 10),
+        assigned_date: todayInIndia(),
       })
       .eq("id", prior.id);
 
@@ -345,7 +395,7 @@ export async function removeFromSite(assignmentId: string, siteId: string) {
     .from("site_assignments")
     .update({
       is_active: false,
-      removed_date: new Date().toISOString().slice(0, 10),
+      removed_date: todayInIndia(),
     })
     .eq("id", assignmentId);
 

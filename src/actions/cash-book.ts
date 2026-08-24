@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
 import { cashEntrySchema, parseFormData } from "@/lib/validations";
+import { todayInIndia } from "@/lib/format";
 import type { CashBook, ExpenseCategory } from "@/types/database";
 
 /**
@@ -65,7 +66,7 @@ export async function createCashEntry(formData: FormData) {
   const supabase = await createClient();
 
   const siteId = v.site_id || null;
-  const entryDate = v.entry_date ?? new Date().toISOString().slice(0, 10);
+  const entryDate = v.entry_date ?? todayInIndia();
 
   // A worker advance becomes a recoverable debt first; if that write fails
   // there is no point recording the cash movement.
@@ -262,7 +263,7 @@ export async function getCashSummary(): Promise<{
     amount: number;
   }[];
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInIndia();
   const monthStart = today.slice(0, 8) + "01";
 
   const summary = rows.reduce(
@@ -347,6 +348,30 @@ export async function voidCashEntry(id: string, reason: string) {
       .from("expenses")
       .update({ deleted_at: now })
       .eq("id", row.reference_id);
+  }
+
+  // A client payment mirrored into the cash book was previously left behind
+  // by a void: the cash vanished from the ledger while the invoice went on
+  // saying it had been paid. Cash and receivables then disagreed permanently,
+  // with nothing to point at the discrepancy. Reversing the payment lets the
+  // invoice trigger restore the balance.
+  if (row.reference_table === "payments" && row.reference_id) {
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .update({ deleted_at: now })
+      .eq("id", row.reference_id)
+      .is("deleted_at", null);
+
+    if (paymentError) {
+      // Put the cash entry back rather than leave the two ledgers apart.
+      await supabase
+        .from("cash_book")
+        .update({ deleted_at: null, notes: row.notes })
+        .eq("id", id);
+      return {
+        error: `The client payment behind this entry could not be reversed: ${paymentError.message}`,
+      };
+    }
   }
 
   revalidatePath("/cash");

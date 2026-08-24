@@ -120,6 +120,32 @@ export function SettingsForm({ settings }: SettingsFormProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="state">State</Label>
+            <Input
+              id="state"
+              name="state"
+              defaultValue={settings.state ?? ""}
+              placeholder="e.g. Tamil Nadu"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="state_code">State Code (GST)</Label>
+            <Input
+              id="state_code"
+              name="state_code"
+              defaultValue={settings.state_code ?? ""}
+              placeholder="e.g. 33 for Tamil Nadu"
+              maxLength={2}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Decides CGST+SGST vs IGST on invoices.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="default_gst_percent">Default GST Rate (%)</Label>
             <Input
               id="default_gst_percent"

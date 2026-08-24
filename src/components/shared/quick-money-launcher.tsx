@@ -29,10 +29,16 @@ export function QuickMoneyLauncher({
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<"in" | "out">("out");
   const [category, setCategory] = useState<string | undefined>(undefined);
+  // The sheet holds its own direction/category state, seeded from these props.
+  // Bumping this key on every launch remounts it so a fresh launch always
+  // starts from the button that was pressed — without it, "Money In" kept the
+  // direction the sheet first mounted with and filed receipts as outflows.
+  const [launchId, setLaunchId] = useState(0);
 
   function launch(nextDirection: "in" | "out", nextCategory?: string) {
     setDirection(nextDirection);
     setCategory(nextCategory);
+    setLaunchId((n) => n + 1);
     setOpen(true);
   }
 
@@ -66,6 +72,7 @@ export function QuickMoneyLauncher({
       </div>
 
       <QuickMoneySheet
+        key={launchId}
         open={open}
         onOpenChange={setOpen}
         defaultDirection={direction}

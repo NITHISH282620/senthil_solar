@@ -66,9 +66,18 @@ export async function updateCompanySettings(formData: FormData) {
     return { error: "Settings not found. Please ensure the database migrations have been run." };
   }
 
+  // Only write back fields the form actually submitted. The schema supplies
+  // defaults for shift times, OT threshold and prefixes that this form does not
+  // render — writing the whole parsed object would silently reset them (e.g.
+  // shift_start_time from the configured 08:00 back to the schema default).
+  const submitted = new Set(Array.from(formData.keys()));
+  const updates = Object.fromEntries(
+    Object.entries(parsed.data).filter(([key]) => submitted.has(key))
+  );
+
   const { error } = await supabase
     .from("company_settings")
-    .update(parsed.data as Record<string, unknown>)
+    .update(updates as Record<string, unknown>)
     .eq("id", (existing as { id: string }).id);
 
   if (error) {

@@ -108,9 +108,11 @@ export default async function SitesPage({ searchParams }: PageProps) {
                         ? `Due ${formatDate(site.planned_end_date)}`
                         : "No deadline"}
                     </span>
-                    <span className="font-medium">
-                      {formatCurrency(Number(site.allocated_value))}
-                    </span>
+                    {site.commercial ? (
+                      <span className="font-medium">
+                        {formatCurrency(Number(site.commercial.allocated_value))}
+                      </span>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
