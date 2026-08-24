@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { FinalisePayrollButton } from "@/components/shared/payroll-actions";
+import { FinalisePayrollButton, PayPayrollButton } from "@/components/shared/payroll-actions";
 import { getPayrollRun } from "@/actions/payroll";
 import { getCurrentUser } from "@/actions/auth";
 import { formatCurrency } from "@/lib/format";
@@ -53,7 +53,14 @@ export default async function PayrollRunPage({ params }: PageProps) {
         <div className="flex items-center gap-3">
           <StatusBadge status={run.status} />
           {currentUser.role === "owner" && (
-            <FinalisePayrollButton runId={run.id} status={run.status} />
+            <>
+              <FinalisePayrollButton runId={run.id} status={run.status} />
+              <PayPayrollButton
+                runId={run.id}
+                status={run.status}
+                netTotal={Number(run.total_net)}
+              />
+            </>
           )}
         </div>
       </PageHeader>

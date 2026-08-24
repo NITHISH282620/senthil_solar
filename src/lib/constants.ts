@@ -170,3 +170,23 @@ export const LEAVE_TYPES = [
   { value: "unpaid", label: "Unpaid Leave" },
   { value: "other", label: "Other" },
 ] as const;
+
+/**
+ * Tables the audit trail covers, in the owner's words rather than the
+ * schema's. Lives here and not in the server action because a "use server"
+ * module may only export async functions.
+ */
+export const AUDITED_TABLES = [
+  { value: "all", label: "Everything" },
+  { value: "cash_book", label: "Cash book" },
+  { value: "payments", label: "Client payments" },
+  { value: "invoices", label: "Invoices" },
+  { value: "expenses", label: "Expenses" },
+  { value: "salary_advances", label: "Worker advances" },
+  { value: "payroll_lines", label: "Payslips" },
+  { value: "profiles", label: "Employees" },
+  { value: "attendance", label: "Attendance" },
+  { value: "sites", label: "Sites" },
+  { value: "contracts", label: "Contracts" },
+  { value: "companies", label: "Clients" },
+] as const;

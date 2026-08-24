@@ -18,6 +18,30 @@ export interface QuotationWithRelations extends Quotation {
 }
 
 /**
+ * The money on a quotation, derived from its line items.
+ *
+ * Kept in one place so the create and update paths cannot drift, and so the
+ * figures are never whatever the browser happened to send.
+ */
+function quotationTotals(
+  items: { quantity: number; unit_price: number }[],
+  discountAmount: number,
+  gstPercent: number
+) {
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const subtotal = round2(
+    items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
+  );
+  // A discount cannot take the taxable value below zero, and GST is charged
+  // on what is actually payable.
+  const discount = round2(Math.min(Math.max(0, discountAmount), subtotal));
+  const gstAmount = round2(((subtotal - discount) * gstPercent) / 100);
+
+  return { subtotal, discount_amount: discount, gst_amount: gstAmount };
+}
+
+/**
  * Fetch all quotations with company name
  */
 export async function getQuotations(params?: {
@@ -131,8 +155,20 @@ export async function createQuotation(
     ? `QT-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
     : (seqData as string);
 
+  // Recompute the money from the line items rather than trusting what the
+  // browser posted. subtotal and gst_amount arrived straight from the client
+  // and total_amount is GENERATED from them, so a forged form post could have
+  // priced a quotation at any figure it liked while the printed line items
+  // said something else entirely.
+  const totals = quotationTotals(
+    parsedItems.data,
+    parsedQuotation.data.discount_amount,
+    parsedQuotation.data.gst_percent
+  );
+
   const insertData = {
     ...parsedQuotation.data,
+    ...totals,
     quotation_number,
     created_by: currentUser.id,
   };
@@ -198,30 +234,58 @@ export async function updateQuotation(
 
   const supabase = await createClient();
 
-  // Update quotation
+  // A quotation the client has already accepted is a commercial commitment;
+  // repricing it in place would rewrite the terms of a live deal.
+  const { data: existing } = await supabase
+    .from("quotations")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  const status = (existing as { status: string } | null)?.status;
+  if (status === "converted" || status === "approved") {
+    return {
+      error: `This quotation has been ${status}. Raise a revision instead of editing it.`,
+    };
+  }
+
+  const totals = quotationTotals(
+    parsedItems.data,
+    parsedQuotation.data.discount_amount,
+    parsedQuotation.data.gst_percent
+  );
+
   const { error: qError } = await supabase
     .from("quotations")
-    .update({ ...parsedQuotation.data, updated_at: new Date().toISOString() })
+    .update({ ...parsedQuotation.data, ...totals })
     .eq("id", id);
 
   if (qError) {
     return { error: qError.message };
   }
 
-  // Replace items: delete old, insert new
-  await supabase.from("quotation_items").delete().eq("quotation_id", id);
-
-  const itemsWithId = parsedItems.data.map((item) => ({
-    ...item,
-    quotation_id: id,
-  }));
-
-  const { error: iError } = await supabase
+  // Insert the replacements first, then drop the originals. The other order
+  // left the quotation with no line items at all whenever the insert failed —
+  // the error was reported, but the priced work had already been deleted.
+  const { data: inserted, error: iError } = await supabase
     .from("quotation_items")
-    .insert(itemsWithId);
+    .insert(parsedItems.data.map((item) => ({ ...item, quotation_id: id })))
+    .select("id");
 
   if (iError) {
     return { error: iError.message };
+  }
+
+  const keepIds = ((inserted ?? []) as { id: string }[]).map((r) => r.id);
+
+  const { error: deleteError } = await supabase
+    .from("quotation_items")
+    .delete()
+    .eq("quotation_id", id)
+    .not("id", "in", `(${keepIds.join(",")})`);
+
+  if (deleteError) {
+    return { error: `The quotation was updated but the old lines remain: ${deleteError.message}` };
   }
 
   revalidatePath("/quotations");

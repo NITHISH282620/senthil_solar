@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { todayInIndia } from "@/lib/format";
 import type { PayrollRun, PayrollLine, Profile } from "@/types/database";
 
 /** Matches auth_can_see_money(); payroll is company-wide financial data. */
@@ -499,6 +500,113 @@ export async function finalisePayroll(runId: string) {
 
   revalidatePath("/payroll");
   revalidatePath(`/payroll/${runId}`);
+  revalidatePath("/dashboard");
+  return { error: null };
+}
+
+/**
+ * Record that the wages in a finalised run have actually been handed over.
+ *
+ * Until this existed, payroll stopped at 'finalised': payroll_lines.is_paid,
+ * paid_date and paid_method were never written by anything, and no cash-book
+ * entry was created. The month's entire wage bill therefore never left the
+ * cash book, so cash in hand overstated reality by the largest single payment
+ * the business makes, and nobody could tell which workers had been paid.
+ *
+ * One cash-book entry is written for the run rather than one per employee:
+ * it is a single act of paying wages, and the payslips carry the detail.
+ * The category is 'salary', which the cash book deliberately excludes from
+ * site cost — labour already reaches site P&L through payroll_site_allocations,
+ * and counting it twice would understate every site's margin.
+ */
+export async function payPayroll(
+  runId: string,
+  paidMethod: "bank_transfer" | "cash" | "upi" | "cheque",
+  paidDate?: string
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !FINALISE_ROLES.includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner can pay out a payroll run." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: run, error: runError } = await supabase
+    .from("payroll_runs")
+    .select("id, status, period_month, period_year, total_net")
+    .eq("id", runId)
+    .is("deleted_at", null)
+    .single();
+
+  if (runError || !run) return { error: "Payroll run not found." };
+
+  const r = run as {
+    status: string;
+    period_month: number;
+    period_year: number;
+    total_net: number;
+  };
+
+  if (r.status === "paid") return { error: "This run has already been paid." };
+  if (r.status !== "finalised") {
+    return { error: "Finalise the run before paying it out." };
+  }
+
+  const netTotal = Number(r.total_net);
+  if (netTotal <= 0) {
+    return { error: "This run has nothing to pay out." };
+  }
+
+  const payDate = paidDate ?? todayInIndia();
+
+  // The cash movement is written first. If it fails there is nothing to undo,
+  // whereas marking payslips paid and then failing to record the cash would
+  // leave the ledgers disagreeing about a month of wages.
+  const { data: cashRow, error: cashError } = await supabase
+    .from("cash_book")
+    .insert({
+      entry_date: payDate,
+      direction: "out",
+      amount: netTotal,
+      payment_mode: paidMethod === "bank_transfer" || paidMethod === "cheque" ? "bank" : paidMethod,
+      is_office: true,
+      category: "salary",
+      description: `Wages for ${String(r.period_month).padStart(2, "0")}/${r.period_year}`,
+      reference_table: "payroll_lines",
+      handled_by: currentUser.id,
+      created_by: currentUser.id,
+    })
+    .select("id")
+    .single();
+
+  if (cashError) {
+    return { error: `Wages could not be posted to the cash book: ${cashError.message}` };
+  }
+
+  const { error: linesError } = await supabase
+    .from("payroll_lines")
+    .update({ is_paid: true, paid_date: payDate, paid_method: paidMethod })
+    .eq("payroll_run_id", runId)
+    .eq("is_paid", false);
+
+  if (linesError) {
+    await supabase
+      .from("cash_book")
+      .delete()
+      .eq("id", (cashRow as { id: string }).id);
+    return { error: linesError.message };
+  }
+
+  const { error } = await supabase
+    .from("payroll_runs")
+    .update({ status: "paid" })
+    .eq("id", runId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/payroll");
+  revalidatePath(`/payroll/${runId}`);
+  revalidatePath("/cash");
   revalidatePath("/dashboard");
   return { error: null };
 }

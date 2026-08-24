@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0008 — SECURITY AND MONEY CORRECTIONS
+-- 0009 — SECURITY AND MONEY CORRECTIONS
 --
 -- Every change here was driven by a reproducible failure against a live
 -- database, not by inspection. The failing case is recorded above each fix.

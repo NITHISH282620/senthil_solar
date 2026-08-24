@@ -20,6 +20,7 @@ import {
   Wallet,
   HardHat,
   Banknote,
+  ShieldCheck,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,7 @@ const navItems: NavItem[] = [
 ];
 
 const bottomItems: NavItem[] = [
+  { title: "Audit Trail", href: "/audit", icon: ShieldCheck, roles: ["owner"] },
   { title: "Settings", href: "/settings", icon: Settings, roles: ["owner"] },
 ];
 
