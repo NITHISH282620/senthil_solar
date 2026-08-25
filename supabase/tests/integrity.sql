@@ -7,6 +7,13 @@
 -- Part 1 must return no rows. Part 2 injects one defect of each class it can
 -- reach and asserts the view reports them, then rolls back — because a check
 -- that is vacuously empty is worse than no check at all: it reassures.
+--
+-- Expected in part 2: three classes caught —
+--   attendance_fraction_vs_status, cash_reference_dangling,
+--   financial_row_unaudited
+-- The money invariants are not injectable here: overpayment, advance balance
+-- and allocation drift are all held by constraints or generated columns, so
+-- producing a violating row would mean defeating the very guard under test.
 -- ============================================================================
 
 \pset footer off
@@ -28,14 +35,20 @@ INSERT INTO payments(company_id, direction, amount, payment_date, payment_method
 SELECT id, 'inbound', 1, CURRENT_DATE, 'cash' FROM companies LIMIT 1;
 ALTER TABLE payments ENABLE TRIGGER audit_payments;
 
--- A person claimed for more than one man-day, and a fraction contradicting its
--- status. Both require disabling the trigger that normally prevents them.
+-- A day_fraction contradicting its status. Payroll reads only the fraction, so
+-- the two disagreeing is what let a half day be paid in full. Requires
+-- disabling the trigger that normally keeps them in step.
+--
+-- Note what is NOT injected here: a person marked present at several sites on
+-- one day. That was a defect under the old invariant and is not one now —
+-- v_attendance_monthly normalises it to a single man-day, and a supervisor
+-- serving four sites is ordinary. It belongs in v_attendance_review, not here.
 ALTER TABLE attendance DISABLE TRIGGER attendance_sync_day_fraction;
 INSERT INTO attendance(employee_id, site_id, date, status, day_fraction, source)
-SELECT p.id, s.id, DATE '2027-01-09', 'present', 1.0, 'admin'
+SELECT p.id, s.id, DATE '2027-01-09', 'half_day', 1.0, 'admin'
 FROM profiles p, sites s
 WHERE p.role = 'worker' AND s.deleted_at IS NULL
-ORDER BY p.created_at, s.created_at LIMIT 2;
+ORDER BY p.created_at, s.created_at LIMIT 1;
 ALTER TABLE attendance ENABLE TRIGGER attendance_sync_day_fraction;
 
 -- A cash line mirroring a payment that does not exist.
