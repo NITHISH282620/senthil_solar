@@ -6,7 +6,70 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/**
+ * Flatten a React node to plain text, for the trigger label.
+ *
+ * Item labels are frequently JSX — an emoji span beside a name, a code beside a
+ * description — and the trigger needs a string.
+ */
+function nodeToText(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return ""
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(nodeToText).join("")
+  if (React.isValidElement(node)) {
+    return nodeToText((node.props as { children?: React.ReactNode }).children)
+  }
+  return ""
+}
+
+/** Collect every SelectItem's value and its rendered text, at any depth. */
+function collectItems(
+  node: React.ReactNode,
+  into: Record<string, React.ReactNode>,
+): void {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return
+
+    const props = child.props as { value?: unknown; children?: React.ReactNode }
+    if (typeof props.value === "string") {
+      const label = nodeToText(props.children).trim()
+      if (label) into[props.value] = label
+    }
+    if (props.children) collectItems(props.children, into)
+  })
+}
+
+/**
+ * Base UI's Select.Value renders the raw `value` unless Select.Root is given an
+ * `items` map — it does not read the chosen item's text the way Radix did.
+ * Nothing in this codebase passed `items`, so every select in the application
+ * displayed its underlying value after a choice was made. Harmless-looking for
+ * a status filter showing "fuel" instead of "Fuel"; unusable for the pickers
+ * keyed by UUID, where choosing a site showed the contractor
+ * "dd702525-dcad-4a68-b348-b3cbaf2fcb43" and he had no way to tell which of his
+ * ten units he had just booked Rs 100 of diesel against.
+ *
+ * Deriving `items` from the children fixes all of them at once, and keeps the
+ * call sites written the way everyone expects.
+ */
+function Select({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<string>) {
+  const derived = React.useMemo(() => {
+    if (items) return items
+    const map: Record<string, React.ReactNode> = {}
+    collectItems(children, map)
+    return Object.keys(map).length > 0 ? map : undefined
+  }, [items, children])
+
+  return (
+    <SelectPrimitive.Root items={derived} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

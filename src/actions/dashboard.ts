@@ -7,13 +7,22 @@ import { getCurrentUser } from "./auth";
 export interface DashboardToday {
   active_sites: number;
   workers_present_today: number;
+  /** Absence is what costs a day of progress, so it is reported, not implied. */
+  workers_absent_today: number;
+  workers_on_leave_today: number;
   sites_missing_attendance: number;
   cash_in_today: number;
   cash_out_today: number;
+  cash_in_yesterday: number;
+  cash_out_yesterday: number;
   fuel_cost_today: number;
   pending_expense_approvals: number;
   total_outstanding: number;
   overdue_invoices: number;
+  /** Approved claims not yet reimbursed, plus wages finalised but not handed over. */
+  owed_to_employees: number;
+  /** Client money banked and not yet set against any invoice. */
+  client_credit_held: number;
   delayed_sites: number;
   contracts_due_this_week: number;
 }

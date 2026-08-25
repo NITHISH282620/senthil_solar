@@ -10,6 +10,8 @@ import {
   FileText,
   Receipt,
   TrendingDown,
+  HandCoins,
+  Coins,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -96,6 +98,7 @@ export default async function DashboardPage() {
         <Tile
           label="In today"
           value={formatCurrency(Number(today?.cash_in_today ?? 0))}
+          hint={`${formatCurrency(Number(today?.cash_in_yesterday ?? 0))} yesterday`}
           icon={<ArrowDownLeft className="h-4 w-4" />}
           tone="good"
           href="/cash?direction=in"
@@ -103,6 +106,7 @@ export default async function DashboardPage() {
         <Tile
           label="Out today"
           value={formatCurrency(Number(today?.cash_out_today ?? 0))}
+          hint={`${formatCurrency(Number(today?.cash_out_yesterday ?? 0))} yesterday`}
           icon={<ArrowUpRight className="h-4 w-4" />}
           tone="bad"
           href="/cash?direction=out"
@@ -122,8 +126,35 @@ export default async function DashboardPage() {
         <Tile
           label="Workers present"
           value={String(today?.workers_present_today ?? 0)}
+          hint={
+            Number(today?.workers_absent_today ?? 0) > 0
+              ? `${today?.workers_absent_today} absent`
+              : "nobody absent"
+          }
+          tone={Number(today?.workers_absent_today ?? 0) > 0 ? "bad" : "neutral"}
           icon={<Users className="h-4 w-4" />}
           href="/attendance"
+        />
+      </div>
+
+      {/* What the business owes, and what it is holding for someone else.
+          Both were computable and shown nowhere, which is how an overpaid
+          Rs 50,000 stayed invisible. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Tile
+          label="You owe your people"
+          value={formatCurrency(Number(today?.owed_to_employees ?? 0))}
+          hint="Approved claims and finalised wages not yet paid out"
+          icon={<HandCoins className="h-4 w-4" />}
+          tone={Number(today?.owed_to_employees ?? 0) > 0 ? "bad" : "neutral"}
+          href="/employees"
+        />
+        <Tile
+          label="Client credit you hold"
+          value={formatCurrency(Number(today?.client_credit_held ?? 0))}
+          hint="Money received that no invoice has claimed yet"
+          icon={<Coins className="h-4 w-4" />}
+          href="/billing"
         />
       </div>
 
@@ -275,12 +306,15 @@ export default async function DashboardPage() {
 function Tile({
   label,
   value,
+  hint,
   icon,
   tone = "neutral",
   href,
 }: {
   label: string;
   value: string;
+  /** The comparison that turns a number into an answer: yesterday, or who is missing. */
+  hint?: string;
   icon: React.ReactNode;
   tone?: "good" | "bad" | "neutral";
   href: string;
@@ -302,6 +336,9 @@ function Tile({
           >
             {value}
           </div>
+          {hint ? (
+            <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>
+          ) : null}
         </CardContent>
       </Card>
     </Link>
