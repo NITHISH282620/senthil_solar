@@ -130,6 +130,8 @@ export async function createCashEntry(formData: FormData) {
         paid_by: currentUser.id,
         payment_mode: v.payment_mode === "bank" ? "bank_transfer" : v.payment_mode,
         vendor_name: v.counterparty,
+        // Company cash out of the box, not a claim against the business.
+        paid_from: "company",
         status: "approved",
         approved_by: currentUser.id,
         approved_at: new Date().toISOString(),
@@ -306,7 +308,7 @@ export async function voidCashEntry(id: string, reason: string) {
 
   const { data: entry, error: fetchError } = await supabase
     .from("cash_book")
-    .select("id, reference_table, reference_id, notes")
+    .select("id, reference_table, reference_id, notes, description")
     .eq("id", id)
     .is("deleted_at", null)
     .single();
@@ -318,6 +320,7 @@ export async function voidCashEntry(id: string, reason: string) {
     reference_table: string | null;
     reference_id: string | null;
     notes: string | null;
+    description: string | null;
   };
 
   const now = new Date().toISOString();
@@ -342,12 +345,59 @@ export async function voidCashEntry(id: string, reason: string) {
       .eq("amount_recovered", 0);
   }
 
-  // Withdraw the cost as well, so site profitability follows the void.
+  // An expense-linked entry is one of two different things, and treating them
+  // alike would destroy a legitimate claim. Petty cash IS the expense, so
+  // voiding it withdraws the cost. A reimbursement is only the payment of a
+  // claim that was approved earlier and remains a real cost — voiding it means
+  // the employee was not in fact paid, so the claim goes back to owing.
   if (row.reference_table === "expenses" && row.reference_id) {
-    await supabase
+    const { data: linked } = await supabase
       .from("expenses")
-      .update({ deleted_at: now })
-      .eq("id", row.reference_id);
+      .select("id, paid_from, status")
+      .eq("id", row.reference_id)
+      .single();
+
+    const expense = linked as { paid_from: string; status: string } | null;
+
+    if (expense?.paid_from === "employee" && expense.status === "reimbursed") {
+      await supabase
+        .from("expenses")
+        .update({ status: "approved" })
+        .eq("id", row.reference_id);
+    } else {
+      await supabase
+        .from("expenses")
+        .update({ deleted_at: now })
+        .eq("id", row.reference_id);
+    }
+  }
+
+  // Voiding a wage payout means the wages were not actually handed over, so the
+  // payslips go back to unpaid and the run back to finalised. Without this the
+  // cash returns to the balance while every payslip still claims to be settled.
+  if (row.reference_table === "payroll_lines" && row.reference_id === null) {
+    const period = /Wages for (\d{2})\/(\d{4})/.exec(row.description ?? "");
+    if (period) {
+      const { data: run } = await supabase
+        .from("payroll_runs")
+        .select("id")
+        .eq("period_month", Number(period[1]))
+        .eq("period_year", Number(period[2]))
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      const runId = (run as { id: string } | null)?.id;
+      if (runId) {
+        await supabase
+          .from("payroll_lines")
+          .update({ is_paid: false, paid_date: null, paid_method: null })
+          .eq("payroll_run_id", runId);
+        await supabase
+          .from("payroll_runs")
+          .update({ status: "finalised" })
+          .eq("id", runId);
+      }
+    }
   }
 
   // A client payment mirrored into the cash book was previously left behind

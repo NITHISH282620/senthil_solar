@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { todayInIndia } from "@/lib/format";
 import {
   expenseSchema,
   expenseApprovalSchema,
@@ -131,6 +132,11 @@ export async function createExpense(formData: FormData) {
       payment_mode: v.payment_mode,
       vendor_name: v.vendor_name,
       receipt_url: v.receipt_url,
+      // Money roles recording spending are moving company cash from the box;
+      // field staff are claiming back money they spent themselves. The two are
+      // structurally identical rows and must never be added together — see
+      // paid_from's comment in migration 0013.
+      paid_from: selfApproved ? "company" : "employee",
       status: selfApproved ? "approved" : "pending",
       approved_by: selfApproved ? currentUser.id : null,
       approved_at: selfApproved ? new Date().toISOString() : null,
@@ -146,6 +152,108 @@ export async function createExpense(formData: FormData) {
   if (v.site_id) revalidatePath(`/sites/${v.site_id}`);
 
   return { data: data as { id: string; expense_number: string }, error: null };
+}
+
+/**
+ * Pay an employee back for money they spent on the company's behalf.
+ *
+ * 'reimbursed' existed in the schema and in the status badge, and nothing ever
+ * set it. An approved claim was therefore recognised as a site cost and then
+ * never paid: cash in hand was overstated by every claim ever approved, and the
+ * supervisor who bought the diesel was never paid back by the system that
+ * recorded him doing it.
+ *
+ * Reimbursement is the moment company cash actually moves, so this is where the
+ * cash-book entry belongs — not at approval, which only recognises the cost.
+ */
+export async function reimburseExpense(
+  expenseId: string,
+  paymentMode: "cash" | "upi" | "bank" | "card" = "cash",
+  bankAccountId?: string,
+) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !MONEY_ROLES.includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner, a manager or an accountant can reimburse." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: expense, error: fetchError } = await supabase
+    .from("expenses")
+    .select("id, expense_number, amount, status, paid_from, paid_by, site_id, title")
+    .eq("id", expenseId)
+    .is("deleted_at", null)
+    .single();
+
+  if (fetchError || !expense) return { error: "Expense not found." };
+
+  const e = expense as {
+    expense_number: string;
+    amount: number;
+    status: string;
+    paid_from: string;
+    paid_by: string | null;
+    site_id: string | null;
+    title: string;
+  };
+
+  if (e.paid_from !== "employee") {
+    return {
+      error: "This was paid from company cash, so there is nobody to reimburse.",
+    };
+  }
+  if (e.status === "reimbursed") return { error: "This claim has already been reimbursed." };
+  if (e.status !== "approved") {
+    return { error: `Approve this claim before reimbursing it (it is ${e.status}).` };
+  }
+  if (paymentMode === "bank" && !bankAccountId) {
+    return { error: "Choose which bank account the reimbursement goes from." };
+  }
+
+  // The cash movement is written first: marking the claim reimbursed and then
+  // failing to record the cash would tell the employee they had been paid while
+  // the ledger disagreed.
+  const { data: cashRow, error: cashError } = await supabase
+    .from("cash_book")
+    .insert({
+      entry_date: todayInIndia(),
+      direction: "out",
+      amount: e.amount,
+      payment_mode: paymentMode,
+      bank_account_id: bankAccountId ?? null,
+      site_id: e.site_id,
+      is_office: e.site_id === null,
+      // Deliberately no category: the cost was already recognised against the
+      // site when the claim was approved, and giving this entry an expense
+      // category would let createCashEntry's mirroring logic count it twice.
+      description: `Reimbursement of ${e.expense_number} — ${e.title}`,
+      reference_table: "expenses",
+      reference_id: expenseId,
+      handled_by: currentUser.id,
+      created_by: currentUser.id,
+    })
+    .select("id")
+    .single();
+
+  if (cashError) {
+    return { error: `Reimbursement could not be posted to the cash book: ${cashError.message}` };
+  }
+
+  const { error } = await supabase
+    .from("expenses")
+    .update({ status: "reimbursed" })
+    .eq("id", expenseId);
+
+  if (error) {
+    await supabase.from("cash_book").delete().eq("id", (cashRow as { id: string }).id);
+    return { error: error.message };
+  }
+
+  revalidatePath("/expenses");
+  revalidatePath(`/expenses/${expenseId}`);
+  revalidatePath("/cash");
+  revalidatePath("/dashboard");
+  return { error: null };
 }
 
 /**
