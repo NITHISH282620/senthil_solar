@@ -28,6 +28,8 @@ actually do, not merely how it looks.
 | **Every select showed a UUID** | Choosing a site displayed `dd702525-dcad-4a68-b348-b3cbaf2fcb43`. Base UI needs an `items` map; nothing passed one, so all 21 selects showed raw values. |
 | **Duplicate money on retry** | A lost response or a refresh created a second cash entry, receipt or expense. Money writes are now keyed per submission intent. |
 | **"What do I owe my people?"** | Unanswerable. Now a dashboard tile over `v_employee_dues`. |
+| **Bank accounts** | The table shipped in migration 0001 with no UI, and `cash_book` refuses a bank entry without one — so no client could pay by transfer or cheque, which is how corporate clients pay. |
+| **Client money before or after an invoice** | An advance, or an overpayment on a settled bill, had no path at all. Now recorded on account and visible as credit. |
 | **Client overpayments were refused outright** | The money was in the bank and the books denied it. Now held on account. |
 
 ## HIGH ROI — build next

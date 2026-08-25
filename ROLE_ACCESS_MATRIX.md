@@ -11,7 +11,8 @@ Legend: **Y** allowed · **·** denied · **own** only their own rows ·
 Last verified: 2026-08-25, against migrations through
 `20260824000800_dashboard_gaps.sql`. Re-verified by
 `supabase/tests/authz_attacks.sql` — 130 attack assertions blocked, 9
-legitimate actions allowed.
+legitimate actions allowed, 0 skipped. Route-level access was then checked
+separately in a production build by typing URLs as a worker.
 
 ## Reading
 
@@ -74,6 +75,8 @@ legitimate actions allowed.
 | Allocate client credit | Y | Y | Y | · | · | · | · | · |
 | **Invite an employee account** | Y | · | · | · | · | · | · | · |
 | Deactivate an employee | Y | · | · | · | · | · | · | · |
+| Manage bank accounts | Y | · | · | · | · | · | · | · |
+| Record money on account | Y | Y | Y | · | · | · | · | · |
 | Delete anything | Y | · | · | · | · | · | · | · |
 
 ## Notes on specific cells
@@ -122,6 +125,14 @@ could hold a session and browse an application full of blank screens.
 registered address were visible to every authenticated user, including a
 self-registered stranger. Field staff read `v_work_settings` instead, which
 carries only the shift, overtime and geofence rules.
+
+**Routes redirect, they do not merely render empty.** RLS returns nothing to a
+field role on billing, contracts, cash, payroll, employees, companies and
+quotations — verified: zero rows, zero rupees, zero names. But those pages
+rendered their full shell to a worker who typed the URL, which tells him he has
+access and that the business has no invoices. All seven now redirect to
+`/dashboard`. `/unauthorized` is reserved for its one true meaning: this
+account cannot be used at all.
 
 **Documents are scoped by entity type**: site documents follow site access,
 commercial documents follow money access, and anything marked confidential is

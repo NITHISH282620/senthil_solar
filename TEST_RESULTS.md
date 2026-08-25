@@ -11,16 +11,17 @@ WORKFLOWS EXERCISED            31
 READ-VISIBILITY PROBES        312   (8 roles x 39 table/view reads)
 WRITE / AUTHORISATION ASSERTS 195   (56 exploratory + 139 in the committed suite)
 BUSINESS / FINANCIAL SCENARIOS 47
-DEFECTS FOUND                  42
-DEFECTS FIXED                  42
+DEFECTS FOUND                  51
+DEFECTS FIXED                  51
 GAPS FOUND, NOT BUILT           7
-PRODUCTION BLOCKERS             5 found, 5 fixed in code
+PRODUCTION BLOCKERS            10 found, 10 fixed in code
                                 1 remaining, in the production deployment
 ```
 
 Counts are of assertions actually executed against a database or a browser, not
-of scenarios considered. Two sessions: the first found 22 defects, the
-production-hardening pass found a further 20.
+of scenarios considered. Three passes: 22 defects in the first, 20 in the
+production-hardening pass, 9 more in the go-live pass — every one of the last
+nine found by RUNNING the application in a production build, not by reading it.
 
 Counts are of assertions actually executed against the database, not of
 scenarios considered.
@@ -451,3 +452,112 @@ the hosted Supabase project in `.env.local` is unreachable. Production login,
 the Vercel build and production database connectivity were not tested, and the
 production project has **not** received migrations 0009–0016. See
 `PRODUCTION_READINESS.md` — this is the remaining blocker.
+
+---
+
+# Go-live pass (2026-08-25)
+
+Run against a **production build** — `next build` then `next start`, not the dev
+server — driven through a real browser. Nine defects, and not one of them was
+visible in the source.
+
+## 22. The deployment target
+
+| Check | Result |
+|---|---|
+| Outbound network | **Works now** — supabase.com, api.supabase.com, vercel.com, npm all respond |
+| Project in `.env.local` | **No DNS record**, checked three ways, while `supabase.co` resolves |
+| A paused project | still resolves and answers "paused" — so this is deleted, or the ref is wrong |
+| Supabase CLI | available via npx 2.115.0, **not logged in**, no access token |
+| Vercel | **no CLI, no token, project not linked** (no `.vercel`) |
+| Git remote | `github.com/NITHISH282620/senthil_solar` |
+
+The previous report inferred the network was blocked. It is not. Re-tested with
+working access, the real finding is that **there is no production database to
+deploy to**, and no credentials to create or link one.
+
+## 23. Defects found by running the production build
+
+| # | Defect | How it presented |
+|---|---|---|
+| 1 | `optionalText/Date/Number` used `.optional()`, which rejects `null` — while the same helpers **emit** `null` | `Invalid input: expected string, received null`. **No quotation could be created**, so no contract, so no work |
+| 2 | Convert-to-Contract was unreachable | The actions block showed for draft/sent; the button renders only when approved. Mutually exclusive — **an accepted quotation could never become a contract** |
+| 3 | Empty-string UUIDs reached Postgres | `invalid input syntax for type uuid: ""`. **No site could be created** without assigning both an engineer and a supervisor |
+| 4 | `bank_accounts` had no UI at all | `cash_book` refuses a bank entry without one, and the payment dialog **defaulted to Bank Transfer** — the normal way an MNC pays failed on a raw constraint name |
+| 5 | Client money had nowhere to go | Advance before invoicing, or extra after settlement: dialog disabled, action refuses. **Money in the bank the system would not take** |
+| 6 | `GET /auth/logout` signed the user out, and the control was a `<Link>` | Next prefetches links in the viewport — **landing on `/unauthorized` logged you out** before touching anything. Also logout CSRF |
+| 7 | Seven routes rendered fully for a worker | RLS meant no data leaked (verified: 0 rows, 0 rupees, 0 names) — but an empty Billing page tells a worker he has access and the business has no invoices |
+| 8 | `/unauthorized` meant two different things | "Your account is broken" shown to a worker who simply is not the owner |
+| 9 | Money failures left no server-side trace | User saw a toast; the operator had no invoice id, amount, message or timestamp to diagnose from |
+
+Defects 1, 2 and 3 are a chain: each one alone stops the business at a
+different link, and all three sat in code that reads correctly.
+
+## 24. Section 9 — the full business chain, in production
+
+Every step through the UI, verified in the database after each:
+
+```
+client            CMP/2026-27/0003  Go-Live Test Client Pvt Ltd, state 33
+quotation         QT/2026-27/0003   Rs 10,00,000 + 18% = Rs 11,80,000  (totals derived server-side)
+sent → approved → converted
+contract          CON/2026-27/0003  Rs 11,80,000
+sites             SITE/…/0007 Rs 5,00,000 · SITE/…/0008 Rs 6,80,000
+bank account      HDFC0001234, primary
+invoice           INV/2026-27/0006  Rs 4,00,000, issued
+attendance        crew marked at two sites, one day
+payroll           July 2026 draft built from attendance
+audit trail       every change above, with before and after
+```
+
+## 25. Section 10 — financial reconciliation, through the UI
+
+| Step | Expected | Result |
+|---|---|---|
+| Invoice raised | Rs 4,00,000 outstanding | ✓ |
+| Pay Rs 2,00,000 | Rs 2,00,000 outstanding, `partially_paid` | ✓ |
+| Pay Rs 2,00,000 | Rs 0 outstanding, `paid` | ✓ |
+| Client sends Rs 50,000 more | **must not disappear** | held as credit, in the cash book, invoice untouched ✓ |
+
+## 26. Section 11 — payroll across two sites, in production
+
+One worker, Rs 1,400/day, marked present at both Go-Live sites on one calendar
+day, through the crew sheet:
+
+```
+attendance recorded   2 rows, raw 2.00 days
+payslip               1.00 day, basic Rs 1,400, gross Rs 1,400
+Go-Live Unit A        Rs 700.00  (0.50 day)
+Go-Live Unit B        Rs 700.00  (0.50 day)
+invariant             PASS — allocations 1,400.00 = payslip cost 1,400.00
+                      PASS — paid Rs 1,400, not Rs 2,800
+```
+
+## 27. Section 12 — mobile, production build, 375×812
+
+Twelve pages: no horizontal overflow, no console errors, no raw UUIDs. The one
+UUID that did appear was in the audit trail's change values; it now renders as
+a short `#7a5fec49` reference rather than 36 characters of noise.
+
+## 28. Section 13 — failure and retry
+
+| Test | Result |
+|---|---|
+| Save clicked twice in one tick | **one** cash entry |
+| Worker types nine restricted URLs | all redirect to `/dashboard` |
+| Session survives the whole sweep | ✓ — it did not before defect 6 was fixed |
+| Unconfigured deployment | `/setup-required` naming the missing variables, HTTP 200, not a 500 |
+
+## 29. Section 15 — deployment
+
+| Check | Result |
+|---|---|
+| All 16 migrations against an empty database | applied cleanly, in order |
+| First account on a fresh deploy | becomes the owner, active |
+| Second account without an invitation | refused |
+| Invited account | created active with the intended role |
+| Integrity on a fresh deploy | 0 violations |
+| Production build with no env vars | graceful `/setup-required` |
+| `NEXT_PUBLIC_*` in the client bundle | the Supabase URL never reaches it |
+| Secrets in the tree or git history | none |
+| Server Actions origin check | Vercel sets `X-Forwarded-Host`; no config needed, and adding `allowedOrigins` would weaken CSRF for no gain |

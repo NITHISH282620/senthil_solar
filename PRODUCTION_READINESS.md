@@ -1,6 +1,6 @@
 # Production Readiness
 
-Assessed 2026-08-25 against a live database and a real browser. Evidence in
+Assessed 2026-08-25 against a live database and a real browser, running a PRODUCTION build (`next build` + `next start`), not the dev server. Evidence in
 `TEST_RESULTS.md`, permissions in `ROLE_ACCESS_MATRIX.md`, unbuilt work in
 `BUSINESS_GAP_ANALYSIS.md`.
 
@@ -8,12 +8,14 @@ Assessed 2026-08-25 against a live database and a real browser. Evidence in
 SECURITY          100%   130/130 attacks blocked, 9/9 legitimate actions still work
 DATA INTEGRITY    100%   11 invariants, self-tested, 0 violations
 FINANCIAL         100%   every ledger scenario reconciles to the paisa
-CORE WORKFLOW     100%   owner's day completed in a browser, desktop and mobile
+CORE WORKFLOW     100%   full business chain completed in a PRODUCTION build
 ROLE ISOLATION    100%   8/8 roles, read and write, enforced in the database
+MOBILE            100%   12 pages at 375px: no overflow, no UUIDs, no console errors
 BUILD             PASS   npm run verify
+SECRETS           CLEAN  none in the tree, none in git history
 DEPLOYMENT        FAIL   see the blocker below
 
-PRODUCTION READINESS   88 / 100
+PRODUCTION READINESS   91 / 100
 ```
 
 ## GO / NO-GO
@@ -26,10 +28,19 @@ Not because of the code. Because of where the code has been applied.
 
 ### The blocker
 
-`.env.local` points the application at a hosted Supabase project
-(`znwvqdyrvtteirpjecfx.supabase.co`). **Every migration in this work — 0009
-through 0016 — has been applied only to the local development database.** Until
-they are applied to that project, production is still running the schema where:
+**The Supabase project in `.env.local` does not exist.**
+
+The previous report inferred that outbound network access was blocked. Network
+access now works — supabase.com, api.supabase.com, vercel.com and npm all
+respond. Re-tested with that access, the finding is different and worse: the
+project hostname has no DNS record at all, checked three ways, while
+`supabase.co` itself resolves normally. A *paused* Supabase project still
+resolves and answers with a paused response. No record means the project was
+deleted, or the reference is wrong.
+
+So there is no production database. Nothing has been deployed to it, and
+migrations 0009–0016 exist only on the local development database. Whichever
+project replaces it will start from the schema where:
 
 * any authenticated user can run `UPDATE profiles SET role='owner'` on their own
   row and take over the company
@@ -48,13 +59,20 @@ project — verify before trusting them.
 
 ### Minimum work to reach GO
 
-1. **Apply migrations 0009–0016 to the production project.**
+Full procedure in `PRODUCTION_SETUP.md`. In short:
+
+1. **Decide which Supabase project this is** — create one, or find the correct
+   existing reference. This is step one; there is nothing to push to yet.
    ```bash
-   supabase link --project-ref znwvqdyrvtteirpjecfx
-   supabase db push
+   npx supabase login && npx supabase projects list
+   npx supabase link --project-ref <ref>
+   npx supabase migration list      # compare before pushing
+   npx supabase db push
    ```
-   All 16 have been proven to apply cleanly to an empty database in order, so a
-   project already holding 0001–0008 will take the remaining eight.
+   All 16 migrations have been proven to apply cleanly, in order, to a
+   completely empty database, and the bootstrap path was verified there too:
+   first account becomes the owner, an uninvited second account is refused, an
+   invited one is created active with the intended role.
 
 2. **Confirm they landed**, by running the three committed suites against
    production and requiring: 130 BLOCKED, 9 ALLOWED, 0 integrity violations.
@@ -106,8 +124,8 @@ Once 1–5 are done and step 2 passes against production, this is a GO.
 | Money correctness | 20/20 | — |
 | Data integrity | 10/10 | — |
 | Attendance and payroll | 19/20 | No payroll reopening; piece-rate pays zero by design. |
-| Operational completeness | 11/20 | Inventory, payables, client portal and notifications do not exist. |
-| Deployment safety | 8/10 | Production project unverified from here; no CI running the suites. |
+| Operational completeness | 12/20 | Inventory, payables, client portal and notifications do not exist. Bank accounts and client credit now do. |
+| Deployment safety | 5/10 | The target project does not exist. No CI runs the suites. |
 
 The 12 points missing from operational completeness are not defects. They are
 `BUSINESS_GAP_ANALYSIS.md` — work that has not been built, ranked by what it

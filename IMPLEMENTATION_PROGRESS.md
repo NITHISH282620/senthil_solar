@@ -257,3 +257,39 @@ wrapper by deriving `items` from the children.
 
 Full evidence in `TEST_RESULTS.md`; readiness and the remaining blocker in
 `PRODUCTION_READINESS.md`.
+
+
+---
+
+## Phase — Go-live execution (2026-08-25)
+
+Ran the deployment-hardening loop against a **production build**, driven through
+a real browser.
+
+**The deployment target does not exist.** Outbound network now works, which the
+previous pass could not confirm. With it working, the finding changed: the
+Supabase project in `.env.local` has no DNS record at all — checked three ways,
+while `supabase.co` resolves. A paused project still resolves. This one is
+deleted, or the reference is wrong. There is no production database, and no
+Supabase or Vercel credentials on this machine to create or link one.
+
+**Nine defects, none of them visible in the source.** Three of them formed a
+chain that stopped the business at successive links: quotations could not be
+created (a schema rejecting the `null` it emits), an approved quotation could
+not become a contract (two mutually exclusive render conditions), and sites
+could not be created without assigning both an engineer and a supervisor (empty
+strings reaching uuid columns). Then: bank payments were impossible because
+`bank_accounts` had no UI while the payment dialog defaulted to Bank Transfer;
+client money arriving outside an invoice had nowhere to go; landing on
+`/unauthorized` silently signed the user out, because Next prefetches links and
+logout answered GET; seven routes rendered fully for a worker; `/unauthorized`
+carried two meanings; and money failures left no server-side trace.
+
+**What passed.** All sixteen migrations apply cleanly to an empty database, and
+the bootstrap path works there — first account becomes owner, uninvited accounts
+are refused, invited ones arrive active with the intended role. Sections 9, 10,
+11, 12 and 13 all verified in the production build. 130/130 attacks blocked.
+Zero integrity violations. No secrets in the tree or in git history.
+
+Verdict and the exact remaining work: `PRODUCTION_READINESS.md`. Procedure:
+`PRODUCTION_SETUP.md`.
