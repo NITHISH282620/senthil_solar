@@ -49,7 +49,20 @@ export default async function QuotationDetailPage({ params }: PageProps) {
 
   const canEdit =
     currentUser?.role === "owner" || currentUser?.role === "manager";
+
+  // Editing the priced work is only safe before the client has accepted it;
+  // updateQuotation refuses an approved or converted quotation for the same
+  // reason.
   const isEditable = quotation.status === "draft" || quotation.status === "sent";
+
+  // The actions block must stay visible for one status longer than editing
+  // does. "Convert to Contract" renders only when the quotation is approved,
+  // and the block that contains it was hidden the moment it became approved —
+  // two conditions that could never both be true, so an accepted quotation
+  // could never become a contract at all. That is the join between winning
+  // work and doing it.
+  const hasActions =
+    isEditable || quotation.status === "approved";
 
   return (
     <div className="space-y-6">
@@ -116,7 +129,7 @@ export default async function QuotationDetailPage({ params }: PageProps) {
           />
 
           {/* Status Actions */}
-          {canEdit && isEditable && currentUser && (
+          {canEdit && hasActions && currentUser && (
             <div className="mt-4 pt-4 border-t">
               <QuotationActions
                 quotationId={quotation.id}
