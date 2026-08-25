@@ -34,6 +34,21 @@ const optionalText = (max: number) =>
     .nullish()
     .transform((v) => (v ? v : null));
 
+/**
+ * Optional foreign key: "" / null / undefined → null.
+ *
+ * An unselected picker submits an empty string, and `z.string().uuid().or(
+ * z.literal(""))` happily passed that straight through to a uuid column —
+ * Postgres answered `invalid input syntax for type uuid: ""`, which is what the
+ * user saw. Every call site had to remember `|| null`; the ones that forgot
+ * were broken. Normalising here means none of them has to.
+ */
+const optionalUuid = () =>
+  z
+    .union([z.literal(""), z.string().uuid("Must be a valid selection")])
+    .nullish()
+    .transform((v) => (v ? v : null));
+
 /** Optional date (ISO yyyy-mm-dd) field: "" / undefined → null. */
 const optionalDate = () =>
   z
@@ -475,7 +490,7 @@ export const paymentSchema = z.object({
   payment_date: z.string().min(1, "Payment date is required"),
   reference_number: optionalText(100),
   tds_deducted: z.coerce.number().min(0).default(0),
-  bank_account_id: z.string().uuid().optional().or(z.literal("")),
+  bank_account_id: optionalUuid(),
   notes: optionalText(2000),
 });
 
@@ -499,8 +514,8 @@ export const siteSchema = z
     panel_count: optionalNumber(0),
     panel_type: optionalText(100),
     inverter_type: optionalText(100),
-    site_engineer_id: z.string().uuid().optional().or(z.literal("")),
-    supervisor_id: z.string().uuid().optional().or(z.literal("")),
+    site_engineer_id: optionalUuid(),
+    supervisor_id: optionalUuid(),
     stage: z.string().min(1).max(50).default("planning"),
     progress_percent: z.coerce.number().int().min(0).max(100).default(0),
     planned_start_date: optionalDate(),
@@ -536,13 +551,13 @@ export const cashEntrySchema = z
     entry_date: optionalDate(),
     category: z.string().min(1, "Category is required").max(50),
     payment_mode: z.enum(["cash", "upi", "bank", "card"]).default("cash"),
-    bank_account_id: z.string().uuid().optional().or(z.literal("")),
+    bank_account_id: optionalUuid(),
     // Office overheads carry no site; cash_book enforces one or the other.
-    site_id: z.string().uuid().optional().or(z.literal("")),
+    site_id: optionalUuid(),
     is_office: checkbox(),
     description: z.string().min(1, "Say what this was for").max(500),
     counterparty: optionalText(200),
-    employee_id: z.string().uuid().optional().or(z.literal("")),
+    employee_id: optionalUuid(),
     notes: optionalText(2000),
   })
   .refine((v) => v.is_office || !!v.site_id, {
