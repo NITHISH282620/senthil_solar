@@ -1,9 +1,10 @@
 -- ============================================================================
 -- Test principals, one per role, for supabase/tests/rls_matrix.sql.
 --
--- Inserting into auth.users fires handle_new_user(), which creates the profile
--- and — since migration 0009 — creates it INACTIVE. The UPDATE that follows is
--- what admits each test user, which is itself the behaviour being relied on.
+-- Inserting into auth.users fires two triggers: guard_user_provisioning(), which
+-- refuses any account the owner did not invite, and handle_new_user(), which
+-- creates the profile. An invited account is created active with the role the
+-- invitation named, so the UPDATE below only has to set pay.
 -- ============================================================================
 
 BEGIN;
@@ -17,6 +18,15 @@ INSERT INTO _p VALUES
  ('t.client@test',   'client',        '11111111-0000-0000-0000-000000000005'),
  ('t.sup2@test',     'supervisor',    '11111111-0000-0000-0000-000000000006'),
  ('t.workerb@test',  'worker',        '11111111-0000-0000-0000-000000000007');
+
+-- The owner authorises each account before it can exist. Migration 0010 refuses
+-- an auth.users insert without an unconsumed invitation, so the harness has to
+-- follow the same path a real hire does — which is also worth exercising.
+INSERT INTO employee_invitations (email, intended_role, invited_by)
+SELECT _p.email, _p.role, (SELECT id FROM profiles WHERE role = 'owner' LIMIT 1)
+FROM _p
+ON CONFLICT (email) DO UPDATE
+  SET consumed_at = NULL, intended_role = EXCLUDED.intended_role;
 
 INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password,
                         email_confirmed_at, created_at, updated_at,
