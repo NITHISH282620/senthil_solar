@@ -26,6 +26,7 @@ import {
 } from "@/actions/dashboard";
 import { getSiteOptions } from "@/actions/sites";
 import { getExpenseCategories } from "@/actions/cash-book";
+import { getBankAccounts } from "@/actions/bank-accounts";
 import { getEmployees } from "@/actions/employees";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,8 @@ export default async function DashboardPage() {
     getEmployees({ status: "active" }),
   ]);
 
+  const { data: bankAccounts } = await getBankAccounts();
+
   const losingSites = (siteProfit ?? []).filter((s) => s.gross_profit < 0);
 
   return (
@@ -77,6 +80,7 @@ export default async function DashboardPage() {
         description="Where the work is, and where the money went."
       >
         <QuickMoneyLauncher
+          bankAccounts={bankAccounts ?? []}
           sites={sites ?? []}
           categories={categories ?? []}
           workers={(employees ?? []).map((e) => ({

@@ -27,11 +27,16 @@ import { toast } from "sonner";
 import { addPayment } from "@/actions/invoices";
 import { formatCurrency } from "@/lib/format";
 
+/** Methods that settle through a bank account, and so require one. */
+const BANK_METHODS = new Set(["bank_transfer", "cheque"]);
+
 interface PaymentModalProps {
   invoiceId: string;
   balanceDue: number;
   isOpen: boolean;
   onClose: () => void;
+  /** The company's bank accounts. Empty is a real state and must be explained. */
+  bankAccounts?: { id: string; account_name: string; bank_name: string }[];
 }
 
 export function PaymentModal({
@@ -39,13 +44,22 @@ export function PaymentModal({
   balanceDue,
   isOpen,
   onClose,
+  bankAccounts = [],
 }: PaymentModalProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   // See cash_book.request_key: a receipt that arrives twice is one receipt.
   const [requestKey, setRequestKey] = useState(newRequestKey);
   const [amount, setAmount] = useState(balanceDue);
-  const [method, setMethod] = useState("bank_transfer");
+  // Default to the method the company can actually record. Bank transfer is the
+  // usual way a corporate client pays, but cash_book refuses a bank entry with
+  // no account on file, so offering it first when none exists guarantees a
+  // failed submission.
+  const [method, setMethod] = useState(
+    bankAccounts.length > 0 ? "bank_transfer" : "cash",
+  );
+  const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id ?? "");
+  const needsBank = BANK_METHODS.has(method);
 
   async function handleSubmit(formData: FormData) {
     if (amount <= 0) {
@@ -53,8 +67,18 @@ export function PaymentModal({
       return;
     }
 
+    if (needsBank && !bankAccountId) {
+      toast.error(
+        bankAccounts.length === 0
+          ? "Add a bank account in Settings before recording a bank transfer or cheque."
+          : "Choose which bank account the money arrived in.",
+      );
+      return;
+    }
+
     setLoading(true);
     formData.set("invoice_id", invoiceId);
+    formData.set("bank_account_id", needsBank ? bankAccountId : "");
     formData.set("amount", amount.toString());
     formData.set("payment_method", method);
     formData.set("request_key", requestKey);
@@ -122,6 +146,34 @@ export function PaymentModal({
                 </SelectContent>
               </Select>
             </div>
+
+            {needsBank && (
+              <div className="space-y-2">
+                <Label htmlFor="bank_account_id">Into which account *</Label>
+                {bankAccounts.length === 0 ? (
+                  <p className="text-sm text-destructive">
+                    No bank account on file. Add one in Settings, or record this
+                    as cash or UPI.
+                  </p>
+                ) : (
+                  <Select
+                    value={bankAccountId}
+                    onValueChange={(v) => setBankAccountId(v ?? "")}
+                  >
+                    <SelectTrigger id="bank_account_id">
+                      <SelectValue placeholder="Choose an account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankAccounts.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.account_name} — {b.bank_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="payment_date">Payment Date</Label>

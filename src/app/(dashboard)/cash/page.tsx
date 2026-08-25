@@ -11,6 +11,7 @@ import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { QuickMoneyLauncher } from "@/components/shared/quick-money-launcher";
 import { getCashBook, getCashSummary, getExpenseCategories } from "@/actions/cash-book";
+import { getBankAccounts } from "@/actions/bank-accounts";
 import { getSiteOptions } from "@/actions/sites";
 import { getEmployees } from "@/actions/employees";
 import { getCurrentUser } from "@/actions/auth";
@@ -54,6 +55,8 @@ export default async function CashBookPage({ searchParams }: PageProps) {
     getEmployees({ status: "active" }),
   ]);
 
+  const { data: bankAccounts } = await getBankAccounts();
+
   const rows = entries ?? [];
 
   // The running balance only means anything against the whole ledger. Under a
@@ -78,6 +81,7 @@ export default async function CashBookPage({ searchParams }: PageProps) {
         description="Every rupee in and out, with a running balance."
       >
         <QuickMoneyLauncher
+          bankAccounts={bankAccounts ?? []}
           sites={sites ?? []}
           categories={categories ?? []}
           workers={(employees ?? []).map((e) => ({

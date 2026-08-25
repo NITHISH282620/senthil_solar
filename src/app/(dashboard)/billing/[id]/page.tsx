@@ -8,8 +8,10 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { PaymentModalWrapper } from "@/components/shared/payment-modal-wrapper";
 import { InvoiceActions } from "@/components/shared/invoice-actions";
 import { ApplyCredit } from "@/components/shared/apply-credit";
+import { RecordOnAccount } from "@/components/shared/record-on-account";
 import { DocumentVault } from "@/components/shared/document-vault";
 import { getInvoice, getClientCreditDetail } from "@/actions/invoices";
+import { getBankAccounts } from "@/actions/bank-accounts";
 import { getDocuments } from "@/actions/documents";
 import { getCompanySettings } from "@/actions/settings";
 import { getCurrentUser } from "@/actions/auth";
@@ -37,6 +39,10 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
     getDocuments("invoice", id),
     getCurrentUser(),
   ]);
+
+  // cash_book refuses a bank entry without an account, so the dialog has to
+  // know which accounts exist before it offers bank transfer at all.
+  const { data: bankAccounts } = await getBankAccounts();
 
   // Credit this client is already holding with us, so an unpaid invoice can be
   // settled from money that has arrived rather than chased twice.
@@ -78,8 +84,20 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
             userRole={currentUser?.role ?? ""}
           />
 
+          {canEdit && invoice.company_id ? (
+            <RecordOnAccount
+              companyId={invoice.company_id}
+              companyName={invoice.company?.name ?? "this client"}
+              bankAccounts={bankAccounts ?? []}
+            />
+          ) : null}
+
           {canEdit && !isPaid && invoice.status !== "cancelled" && (
-            <PaymentModalWrapper invoiceId={invoice.id} balanceDue={invoice.balance_due ?? 0} />
+            <PaymentModalWrapper
+              invoiceId={invoice.id}
+              balanceDue={invoice.balance_due ?? 0}
+              bankAccounts={bankAccounts ?? []}
+            />
           )}
           
           <Link

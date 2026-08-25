@@ -648,6 +648,22 @@ export const companySettingsSchema = z.object({
   default_geofence_radius_m: z.coerce.number().min(10).default(500),
 });
 
+// ─── Bank accounts ───────────────────────────────────────
+
+export const bankAccountSchema = z.object({
+  account_name: z.string().min(1, "Give the account a name").max(120),
+  bank_name: z.string().min(1, "Bank name is required").max(120),
+  account_number: z.string().min(4, "Account number looks too short").max(40),
+  // 4 letters, 0, then 6 alphanumerics — the RBI format.
+  ifsc: z
+    .string()
+    .regex(/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/, "IFSC should look like HDFC0001234"),
+  branch: optionalText(120),
+  account_type: z.enum(["current", "savings", "od", "cc"]).default("current"),
+  opening_balance: z.coerce.number().default(0),
+  is_primary: checkbox(),
+});
+
 // ─── Documents ───────────────────────────────────────────
 
 export const DOCUMENT_ENTITY_TYPES = [

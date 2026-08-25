@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/actions/auth";
 import { getCompanySettings } from "@/actions/settings";
 import { SettingsForm } from "@/components/forms/settings-form";
+import { BankAccounts } from "@/components/shared/bank-accounts";
+import { getBankAccounts } from "@/actions/bank-accounts";
 import { PageHeader } from "@/components/shared/page-header";
 import type { Metadata } from "next";
 
@@ -16,7 +18,10 @@ export default async function SettingsPage() {
     redirect("/dashboard");
   }
 
-  const { data: settings } = await getCompanySettings();
+  const [{ data: settings }, { data: bankAccounts }] = await Promise.all([
+    getCompanySettings(),
+    getBankAccounts(),
+  ]);
 
   if (!settings) {
     return (
@@ -37,6 +42,7 @@ export default async function SettingsPage() {
         description="Manage your company information and system configuration"
       />
       <SettingsForm settings={settings} />
+      <BankAccounts accounts={bankAccounts ?? []} />
     </div>
   );
 }

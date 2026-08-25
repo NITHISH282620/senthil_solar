@@ -10,6 +10,7 @@ import {
   sanitizeSearchInput,
 } from "@/lib/validations";
 import { isDuplicateKey } from "@/lib/utils";
+import { todayInIndia } from "@/lib/format";
 import type {
   Invoice,
   InvoiceItem,
@@ -544,6 +545,104 @@ export async function addPayment(formData: FormData) {
  * the invoice trigger only counts rows with deleted_at IS NULL, so soft
  * deletion is what restores the balance.
  */
+/**
+ * Record client money that no invoice is claiming yet.
+ *
+ * addPayment refuses a fully settled invoice, and the Record Payment button is
+ * disabled once the balance reaches zero — correctly, since paying a paid
+ * invoice is meaningless. But that left the two cases the contractor actually
+ * meets with nowhere to go: a client who transfers an advance before any
+ * invoice exists, and a client who sends more than the last bill after it has
+ * been settled. The money was in the bank and the system would not take it.
+ *
+ * It lands as an unallocated receipt against the company — real cash, in the
+ * cash book, visible in v_client_credit, and applied to a future invoice with
+ * applyCreditToInvoice.
+ */
+export async function recordClientCredit(formData: FormData) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !["owner", "manager", "accountant"].includes(currentUser.role)) {
+    return { error: "Unauthorized. Only the owner, a manager or an accountant can record client money." };
+  }
+
+  const companyId = formData.get("company_id") as string;
+  const amount = Number(formData.get("amount"));
+  const method = (formData.get("payment_method") as string) || "bank_transfer";
+  const paymentDate = (formData.get("payment_date") as string) || todayInIndia();
+  const bankAccountId = (formData.get("bank_account_id") as string) || null;
+  const reference = (formData.get("reference_number") as string) || null;
+  const notes = (formData.get("notes") as string) || null;
+  const requestKey = (formData.get("request_key") as string) || null;
+
+  if (!companyId) return { error: "Choose which client the money came from." };
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Enter the amount that was received." };
+  }
+  if (!(method in CASH_BOOK_MODE)) return { error: "Unknown payment method." };
+
+  const cashMode = CASH_BOOK_MODE[method as keyof typeof CASH_BOOK_MODE];
+  if (cashMode === "bank" && !bankAccountId) {
+    return { error: "Choose which bank account the money arrived in." };
+  }
+
+  const supabase = await createClient();
+
+  if (requestKey) {
+    const { data: existing } = await supabase
+      .from("payments").select("id").eq("request_key", requestKey).maybeSingle();
+    if (existing) return { error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("payments")
+    .insert({
+      invoice_id: null,
+      company_id: companyId,
+      bank_account_id: bankAccountId,
+      direction: "inbound",
+      amount,
+      payment_date: paymentDate,
+      payment_method: method,
+      reference_number: reference,
+      notes: notes ?? "Received on account",
+      received_by: currentUser.id,
+      created_by: currentUser.id,
+      request_key: requestKey,
+    })
+    .select("id")
+    .single();
+
+  if (isDuplicateKey(error, "payments_request_key_uniq")) return { error: null };
+  if (error) return { error: error.message };
+
+  const paymentId = (data as { id: string }).id;
+
+  const { error: cashError } = await supabase.from("cash_book").insert({
+    entry_date: paymentDate,
+    direction: "in",
+    amount,
+    payment_mode: cashMode,
+    bank_account_id: bankAccountId,
+    is_office: true,
+    company_id: companyId,
+    description: "Received on account, not yet set against an invoice",
+    reference_table: "payments",
+    reference_id: paymentId,
+    handled_by: currentUser.id,
+    created_by: currentUser.id,
+  });
+
+  if (cashError) {
+    await supabase.from("payments").delete().eq("id", paymentId);
+    return { error: `Could not post to the cash book: ${cashError.message}` };
+  }
+
+  revalidatePath("/billing");
+  revalidatePath("/dashboard");
+  revalidatePath("/cash");
+  return { error: null };
+}
+
 export interface ClientCredit {
   company_id: string;
   company_name: string;

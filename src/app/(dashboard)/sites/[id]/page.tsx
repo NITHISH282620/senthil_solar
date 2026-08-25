@@ -12,6 +12,7 @@ import { SiteCrew } from "@/components/shared/site-crew";
 import { getSite, getSiteStages, getSiteAssignments } from "@/actions/sites";
 import { getSiteProfit } from "@/actions/dashboard";
 import { getExpenseCategories } from "@/actions/cash-book";
+import { getBankAccounts } from "@/actions/bank-accounts";
 import { getEmployees } from "@/actions/employees";
 import { getCurrentUser } from "@/actions/auth";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -42,6 +43,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
       getSiteAssignments(id),
     ]);
 
+  const { data: bankAccounts } = await getBankAccounts();
+
   if (!site) notFound();
 
   const seesMoney = !!currentUser && MONEY_ROLES.includes(currentUser.role);
@@ -66,6 +69,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
         <div className="flex flex-wrap items-center gap-2">
           {seesMoney && (
             <QuickMoneyLauncher
+              bankAccounts={bankAccounts ?? []}
               variant="compact"
               lockedSiteId={site.id}
               sites={[]}

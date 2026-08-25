@@ -39,6 +39,11 @@ interface QuickMoneySheetProps {
   workers: { id: string; full_name: string }[];
   /** Locks the entry to one site, e.g. when opened from a site page. */
   lockedSiteId?: string;
+  /**
+   * The company's bank accounts. cash_book refuses a 'bank' entry without one,
+   * so offering the mode with none on file guarantees a failed submission.
+   */
+  bankAccounts?: { id: string; account_name: string; bank_name: string }[];
 }
 
 /** Taps beat typing. These cover the overwhelming majority of daily entries. */
@@ -53,6 +58,7 @@ export function QuickMoneySheet({
   categories,
   workers,
   lockedSiteId,
+  bankAccounts = [],
 }: QuickMoneySheetProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -66,6 +72,7 @@ export function QuickMoneySheet({
   const [siteId, setSiteId] = useState(lockedSiteId ?? "");
   const [isOffice, setIsOffice] = useState(false);
   const [paymentMode, setPaymentMode] = useState("cash");
+  const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id ?? "");
   const [employeeId, setEmployeeId] = useState("");
   const [description, setDescription] = useState("");
 
@@ -103,6 +110,14 @@ export function QuickMoneySheet({
       toast.error("Choose which worker received the advance.");
       return;
     }
+    if (paymentMode === "bank" && !bankAccountId) {
+      toast.error(
+        bankAccounts.length === 0
+          ? "Add a bank account in Settings before recording bank money."
+          : "Choose which bank account this went through.",
+      );
+      return;
+    }
 
     setLoading(true);
 
@@ -121,6 +136,7 @@ export function QuickMoneySheet({
       description.trim() || selectedCategory?.label || "Cash entry"
     );
     formData.set("request_key", requestKey);
+    if (paymentMode === "bank") formData.set("bank_account_id", bankAccountId);
 
     const { error } = await createCashEntry(formData);
 
@@ -288,7 +304,11 @@ export function QuickMoneySheet({
           <div className="space-y-2">
             <Label>Paid by</Label>
             <div className="grid grid-cols-4 gap-2">
-              {(["cash", "upi", "bank", "card"] as const).map((mode) => (
+              {(
+                bankAccounts.length > 0
+                  ? (["cash", "upi", "bank", "card"] as const)
+                  : (["cash", "upi", "card"] as const)
+              ).map((mode) => (
                 <button
                   key={mode}
                   type="button"

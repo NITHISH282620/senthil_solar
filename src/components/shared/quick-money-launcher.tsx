@@ -11,6 +11,7 @@ interface QuickMoneyLauncherProps {
   categories: { code: string; label: string; icon: string | null }[];
   workers: { id: string; full_name: string }[];
   lockedSiteId?: string;
+  bankAccounts?: { id: string; account_name: string; bank_name: string }[];
   /** Compact drops the labels down to icons for tight headers. */
   variant?: "full" | "compact";
 }
@@ -24,6 +25,7 @@ export function QuickMoneyLauncher({
   categories,
   workers,
   lockedSiteId,
+  bankAccounts = [],
   variant = "full",
 }: QuickMoneyLauncherProps) {
   const [open, setOpen] = useState(false);
@@ -75,6 +77,7 @@ export function QuickMoneyLauncher({
         key={launchId}
         open={open}
         onOpenChange={setOpen}
+        bankAccounts={bankAccounts}
         defaultDirection={direction}
         defaultCategory={category}
         sites={sites}

@@ -8,9 +8,14 @@ import { PaymentModal } from "./payment-modal";
 interface PaymentModalWrapperProps {
   invoiceId: string;
   balanceDue: number;
+  bankAccounts?: { id: string; account_name: string; bank_name: string }[];
 }
 
-export function PaymentModalWrapper({ invoiceId, balanceDue }: PaymentModalWrapperProps) {
+export function PaymentModalWrapper({
+  invoiceId,
+  balanceDue,
+  bankAccounts = [],
+}: PaymentModalWrapperProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -26,6 +31,7 @@ export function PaymentModalWrapper({ invoiceId, balanceDue }: PaymentModalWrapp
       <PaymentModal
         invoiceId={invoiceId}
         balanceDue={balanceDue}
+        bankAccounts={bankAccounts}
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
       />
