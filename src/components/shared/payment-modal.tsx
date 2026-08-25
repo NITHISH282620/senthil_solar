@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { newRequestKey } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -41,12 +42,14 @@ export function PaymentModal({
 }: PaymentModalProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  // See cash_book.request_key: a receipt that arrives twice is one receipt.
+  const [requestKey, setRequestKey] = useState(newRequestKey);
   const [amount, setAmount] = useState(balanceDue);
   const [method, setMethod] = useState("bank_transfer");
 
   async function handleSubmit(formData: FormData) {
-    if (amount <= 0 || amount > balanceDue) {
-      toast.error(`Amount must be between 1 and ${balanceDue}`);
+    if (amount <= 0) {
+      toast.error("Enter the amount that was received.");
       return;
     }
 
@@ -54,13 +57,20 @@ export function PaymentModal({
     formData.set("invoice_id", invoiceId);
     formData.set("amount", amount.toString());
     formData.set("payment_method", method);
+    formData.set("request_key", requestKey);
 
     try {
       const result = await addPayment(formData);
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Payment recorded successfully");
+        const excess = Math.round((amount - balanceDue) * 100) / 100;
+        toast.success(
+          excess > 0
+            ? `Payment recorded. ₹${excess.toFixed(2)} more than this invoice owed is held as credit for this client.`
+            : "Payment recorded successfully",
+        );
+        setRequestKey(newRequestKey());
         onClose();
         router.refresh();
       }
@@ -90,7 +100,6 @@ export function PaymentModal({
               <Input
                 type="number"
                 step="0.01"
-                max={balanceDue}
                 min={1}
                 value={amount}
                 onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
@@ -149,7 +158,7 @@ export function PaymentModal({
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || amount <= 0 || amount > balanceDue}>
+            <Button type="submit" disabled={loading || amount <= 0}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Record Payment
             </Button>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
 import { cashEntrySchema, parseFormData } from "@/lib/validations";
+import { isDuplicateKey } from "@/lib/utils";
 import { todayInIndia } from "@/lib/format";
 import type { CashBook, ExpenseCategory } from "@/types/database";
 
@@ -67,6 +68,23 @@ export async function createCashEntry(formData: FormData) {
 
   const siteId = v.site_id || null;
   const entryDate = v.entry_date ?? todayInIndia();
+
+  // One key per submission intent. If this exact submission already landed —
+  // a lost response on a weak site connection, a refresh, a retry after a
+  // timeout — return what it created instead of spending the money twice.
+  const requestKey = (formData.get("request_key") as string) || null;
+
+  if (requestKey) {
+    const { data: existing } = await supabase
+      .from("cash_book")
+      .select("id")
+      .eq("request_key", requestKey)
+      .maybeSingle();
+
+    if (existing) {
+      return { data: existing as { id: string }, error: null };
+    }
+  }
 
   // A worker advance becomes a recoverable debt first; if that write fails
   // there is no point recording the cash movement.
@@ -172,9 +190,21 @@ export async function createCashEntry(formData: FormData) {
       handled_by: currentUser.id,
       notes: v.notes,
       created_by: currentUser.id,
+      request_key: requestKey,
     })
     .select("id")
     .single();
+
+  // Two submissions racing: the loser sees the winner's row rather than an
+  // error the user cannot act on.
+  if (isDuplicateKey(error, "cash_book_request_key_uniq")) {
+    if (advanceId) await supabase.from("salary_advances").delete().eq("id", advanceId);
+    if (expenseId) await supabase.from("expenses").delete().eq("id", expenseId);
+
+    const { data: existing } = await supabase
+      .from("cash_book").select("id").eq("request_key", requestKey!).maybeSingle();
+    if (existing) return { data: existing as { id: string }, error: null };
+  }
 
   if (error) {
     if (advanceId) {

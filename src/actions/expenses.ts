@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
 import { todayInIndia } from "@/lib/format";
+import { isDuplicateKey } from "@/lib/utils";
 import {
   expenseSchema,
   expenseApprovalSchema,
@@ -102,6 +103,22 @@ export async function createExpense(formData: FormData) {
   const v = parsed.data;
   const supabase = await createClient();
 
+  // See cash_book.request_key. Without this a retry on a weak site connection
+  // books the same diesel twice against the same site.
+  const requestKey = (formData.get("request_key") as string) || null;
+
+  if (requestKey) {
+    const { data: existing } = await supabase
+      .from("expenses")
+      .select("id, expense_number")
+      .eq("request_key", requestKey)
+      .maybeSingle();
+
+    if (existing) {
+      return { data: existing as { id: string; expense_number: string }, error: null };
+    }
+  }
+
   const { data: expenseNumber, error: seqError } = await supabase.rpc(
     "next_document_number",
     { p_doc_type: "expense", p_prefix: "EXP" }
@@ -141,9 +158,18 @@ export async function createExpense(formData: FormData) {
       approved_by: selfApproved ? currentUser.id : null,
       approved_at: selfApproved ? new Date().toISOString() : null,
       created_by: currentUser.id,
+      request_key: requestKey,
     })
     .select("id, expense_number")
     .single();
+
+  if (isDuplicateKey(error, "expenses_request_key_uniq")) {
+    const { data: existing } = await supabase
+      .from("expenses").select("id, expense_number").eq("request_key", requestKey!).maybeSingle();
+    if (existing) {
+      return { data: existing as { id: string; expense_number: string }, error: null };
+    }
+  }
 
   if (error) return { data: null, error: error.message };
 

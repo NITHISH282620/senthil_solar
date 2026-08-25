@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { newRequestKey } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import {
   Sheet,
@@ -55,6 +56,9 @@ export function QuickMoneySheet({
 }: QuickMoneySheetProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  // One key per submission intent. Kept across retries so a lost response or a
+  // second tap records the same money once; replaced only after it lands.
+  const [requestKey, setRequestKey] = useState(newRequestKey);
 
   const [direction, setDirection] = useState<"in" | "out">(defaultDirection);
   const [amount, setAmount] = useState("");
@@ -116,6 +120,7 @@ export function QuickMoneySheet({
       "description",
       description.trim() || selectedCategory?.label || "Cash entry"
     );
+    formData.set("request_key", requestKey);
 
     const { error } = await createCashEntry(formData);
 
@@ -129,6 +134,8 @@ export function QuickMoneySheet({
       `${direction === "in" ? "Received" : "Paid"} ${formatCurrency(numericAmount)}`
     );
     reset();
+    // The money has landed, so the next entry is a genuinely new intent.
+    setRequestKey(newRequestKey());
     setLoading(false);
     onOpenChange(false);
     router.refresh();

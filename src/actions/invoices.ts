@@ -9,6 +9,7 @@ import {
   parseFormData,
   sanitizeSearchInput,
 } from "@/lib/validations";
+import { isDuplicateKey } from "@/lib/utils";
 import type {
   Invoice,
   InvoiceItem,
@@ -391,6 +392,21 @@ export async function addPayment(formData: FormData) {
   const v = parsed.data;
   const supabase = await createClient();
 
+  // See cash_book.request_key: a receipt that arrives twice is one receipt.
+  // Recording a client payment twice is the most damaging duplicate in the
+  // system — it marks an invoice paid that is not.
+  const requestKey = (formData.get("request_key") as string) || null;
+
+  if (requestKey) {
+    const { data: existing } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("request_key", requestKey)
+      .maybeSingle();
+
+    if (existing) return { data: existing as { id: string }, error: null };
+  }
+
   // Carry the invoice's lineage onto the payment so receivables and site
   // profitability stay attributable.
   const { data: invoice, error: invError } = await supabase
@@ -447,9 +463,16 @@ export async function addPayment(formData: FormData) {
       notes: v.notes,
       received_by: currentUser.id,
       created_by: currentUser.id,
+      request_key: requestKey,
     })
     .select("id")
     .single();
+
+  if (isDuplicateKey(error, "payments_request_key_uniq")) {
+    const { data: existing } = await supabase
+      .from("payments").select("id").eq("request_key", requestKey!).maybeSingle();
+    if (existing) return { data: existing as { id: string }, error: null };
+  }
 
   if (error) {
     return { data: null, error: error.message };
