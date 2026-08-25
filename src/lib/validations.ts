@@ -11,8 +11,13 @@ import { z } from "zod";
 const optionalNumber = (min?: number, max?: number) =>
   z
     .union([z.literal(""), z.coerce.number()])
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : (v as number)))
+    // nullish, not optional: these helpers NORMALISE empty values to null, so a
+    // schema that will not ACCEPT null cannot take back what it just produced.
+    // Server actions that receive a plain object rather than FormData send
+    // explicit nulls for empty optional fields, and every one of them was
+    // rejected with "expected string, received null".
+    .nullish()
+    .transform((v) => (v === "" || v === undefined || v === null ? null : (v as number)))
     .refine((v) => v === null || min === undefined || v >= min, {
       message: min === 0 ? "Cannot be negative" : `Must be at least ${min}`,
     })
@@ -25,14 +30,15 @@ const optionalText = (max: number) =>
   z
     .string()
     .max(max, `Must be ${max} characters or fewer`)
-    .optional()
+    // See optionalNumber: nullish so the schema accepts the null it emits.
+    .nullish()
     .transform((v) => (v ? v : null));
 
 /** Optional date (ISO yyyy-mm-dd) field: "" / undefined → null. */
 const optionalDate = () =>
   z
     .string()
-    .optional()
+    .nullish()
     .transform((v) => (v ? v : null));
 
 /**
