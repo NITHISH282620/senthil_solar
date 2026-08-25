@@ -60,7 +60,14 @@ const navItems: NavItem[] = [
     icon: FileText,
     roles: ["owner", "manager"],
   },
-  { title: "Contracts", href: "/contracts", icon: Briefcase },
+  {
+    title: "Contracts",
+    href: "/contracts",
+    icon: Briefcase,
+    // Contracts are money: auth_can_see_money() hides every row from a field
+    // role, so linking them there only ever produced an empty page.
+    roles: ["owner", "manager", "accountant"],
+  },
   { title: "Sites", href: "/sites", icon: HardHat },
   {
     title: "Cash Book",

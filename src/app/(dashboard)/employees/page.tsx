@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
@@ -42,12 +43,21 @@ interface PageProps {
   }>;
 }
 
+/**
+ * RLS returns nothing here for a field role, so no data leaks — but an empty
+ * page implies the access exists. Redirect instead of pretending.
+ */
+const STAFF_ROLES = ["owner", "manager"];
+
 export default async function EmployeesPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const [{ data: employees }, currentUser] = await Promise.all([
     getEmployees(params),
     getCurrentUser(),
   ]);
+
+  if (!currentUser) redirect("/login");
+  if (!STAFF_ROLES.includes(currentUser.role)) redirect("/dashboard");
 
   const isAdmin = currentUser?.role === "owner";
 

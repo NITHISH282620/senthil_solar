@@ -42,6 +42,23 @@ const NOTABLE = new Set([
   "day_fraction",
 ]);
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Render one value from the trail.
+ *
+ * A full UUID tells the owner nothing and crowds out the part of the line that
+ * does — "supervisor_id: — → 7a5fec49-4d49-43a2-955a-d1cd0f156789" is mostly
+ * noise. Names are resolved where the actor is known; for a referenced row the
+ * short form at least stays comparable between two entries.
+ */
+function renderValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const text = String(value);
+  return UUID_RE.test(text) ? `#${text.slice(0, 8)}` : text;
+}
+
 function describe(entry: {
   changed_fields: string[] | null;
   old_values: Record<string, unknown> | null;
@@ -58,9 +75,9 @@ function describe(entry: {
   return shown
     .slice(0, 3)
     .map((f) => {
-      const before = entry.old_values?.[f];
-      const after = entry.new_values?.[f];
-      return `${f}: ${before ?? "—"} → ${after ?? "—"}`;
+      return `${f}: ${renderValue(entry.old_values?.[f])} → ${renderValue(
+        entry.new_values?.[f],
+      )}`;
     })
     .join(", ");
 }
@@ -70,7 +87,10 @@ export default async function AuditPage({ searchParams }: PageProps) {
 
   const currentUser = await getCurrentUser();
   if (!currentUser) return null;
-  if (currentUser.role !== "owner") redirect("/unauthorized");
+  // /unauthorized means "this account cannot be used". Someone who simply is
+  // not the owner is a different case and should not be told their account is
+  // broken.
+  if (currentUser.role !== "owner") redirect("/dashboard");
 
   const { data: entries } = await getAuditTrail({ table, action, limit: 200 });
 

@@ -1,6 +1,7 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ShieldOff } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -17,6 +18,13 @@ export const metadata: Metadata = {
  * happened. The page must not depend on the thing it reports the absence of.
  */
 export default function UnauthorizedPage() {
+  async function signOut() {
+    "use server";
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+    redirect("/login");
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6 text-center">
@@ -38,9 +46,14 @@ export default function UnauthorizedPage() {
           Ask the owner to activate your account, then sign in again.
         </p>
 
-        <div className="pt-2">
-          <Button render={<Link href="/auth/logout" />}>Sign out</Button>
-        </div>
+        {/*
+          A form, not a link. The sign-out control was a <Link> to a GET route
+          handler, and Next prefetches links in the viewport — so simply landing
+          on this page signed the user out before they touched anything.
+        */}
+        <form action={signOut} className="pt-2">
+          <Button type="submit">Sign out</Button>
+        </form>
       </div>
     </div>
   );

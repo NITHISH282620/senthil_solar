@@ -326,6 +326,30 @@ export function QuickMoneySheet({
             </div>
           </div>
 
+          {/* Which account the bank money moved through. Shown only when it is
+              actually a choice — with one account the answer is not in doubt,
+              and a second control on a phone is a cost with no benefit. */}
+          {paymentMode === "bank" && bankAccounts.length > 1 && (
+            <div className="space-y-2">
+              <Label htmlFor="quick-bank">Bank account</Label>
+              <Select
+                value={bankAccountId}
+                onValueChange={(v) => setBankAccountId(v ?? "")}
+              >
+                <SelectTrigger id="quick-bank">
+                  <SelectValue placeholder="Choose an account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankAccounts.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.account_name} — {b.bank_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Note — optional by design */}
           <div className="space-y-2">
             <Label htmlFor="quick-note">

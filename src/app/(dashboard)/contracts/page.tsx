@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Search, Filter, Briefcase } from "lucide-react";
 import { buttonVariants, Button } from "@/components/ui/button";
@@ -34,6 +35,13 @@ interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
+/**
+ * RLS already returns nothing here for a field role, so this leaks no data —
+ * but rendering an empty page implies the access exists and that the business
+ * has no invoices. Send them somewhere true instead.
+ */
+const MONEY_ROLES = ["owner", "manager", "accountant"];
+
 export default async function ContractsPage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const search = typeof resolvedParams.search === "string" ? resolvedParams.search : undefined;
@@ -44,7 +52,10 @@ export default async function ContractsPage({ searchParams }: PageProps) {
     getContracts({ search, status }),
   ]);
 
-  const canCreate = currentUser?.role === "owner" || currentUser?.role === "manager";
+  if (!currentUser) redirect("/login");
+  if (!MONEY_ROLES.includes(currentUser.role)) redirect("/dashboard");
+
+  const canCreate = currentUser.role === "owner" || currentUser.role === "manager";
 
   return (
     <div className="space-y-6">

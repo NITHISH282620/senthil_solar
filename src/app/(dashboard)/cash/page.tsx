@@ -39,7 +39,10 @@ export default async function CashBookPage({ searchParams }: PageProps) {
 
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
-  if (!LEDGER_ROLES.includes(currentUser.role)) redirect("/unauthorized");
+  // /unauthorized now means "this account cannot be used at all". A worker who
+  // simply has no business on the cash page is a different thing, and telling
+  // them their account is broken would be a lie.
+  if (!LEDGER_ROLES.includes(currentUser.role)) redirect("/dashboard");
 
   const [
     { data: entries },

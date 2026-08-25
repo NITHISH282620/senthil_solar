@@ -35,7 +35,8 @@ export default async function PayrollRunPage({ params }: PageProps) {
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
   if (!["owner", "manager", "accountant"].includes(currentUser.role)) {
-    redirect("/unauthorized");
+    // Not the owner is not the same as a broken account.
+    redirect("/dashboard");
   }
 
   const { data } = await getPayrollRun(id);
