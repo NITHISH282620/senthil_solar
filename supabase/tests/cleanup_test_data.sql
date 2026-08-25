@@ -19,6 +19,14 @@ DELETE FROM payments   WHERE invoice_id IN (SELECT id FROM invoices WHERE invoic
 DELETE FROM invoices   WHERE invoice_number LIKE 'SIM/%';
 DELETE FROM sites      WHERE site_code LIKE 'SIM/%';
 DELETE FROM contracts  WHERE contract_number LIKE 'SIM/%';
+DELETE FROM cash_book  WHERE site_id IN (SELECT id FROM sites WHERE name LIKE 'Go-Live%');
+DELETE FROM expenses   WHERE site_id IN (SELECT id FROM sites WHERE name LIKE 'Go-Live%');
+DELETE FROM payments   WHERE company_id IN (SELECT id FROM companies WHERE name LIKE 'Go-Live%');
+DELETE FROM invoices   WHERE company_id IN (SELECT id FROM companies WHERE name LIKE 'Go-Live%');
+DELETE FROM sites      WHERE name LIKE 'Go-Live%';
+DELETE FROM contracts  WHERE company_id IN (SELECT id FROM companies WHERE name LIKE 'Go-Live%');
+DELETE FROM quotations WHERE company_id IN (SELECT id FROM companies WHERE name LIKE 'Go-Live%');
+DELETE FROM companies  WHERE name LIKE 'Go-Live%';
 DELETE FROM companies  WHERE company_code IN ('SIM','P3','P3D','P4','P7','P13','P13B','CR','IDEM');
 DELETE FROM vendors    WHERE vendor_code LIKE 'SIM/%';
 

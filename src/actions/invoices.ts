@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { logFailure } from "@/lib/observability";
 import { getCompanySettings } from "./settings";
 import {
   paymentSchema,
@@ -531,6 +532,11 @@ export async function addPayment(formData: FormData) {
   if (cashError) {
     // Keep the two ledgers consistent rather than leaving money unexplained.
     await supabase.from("payments").delete().eq("id", payment.id);
+    logFailure("addPayment.cashBook", cashError.message, {
+      invoice: inv.invoice_number,
+      amount: settles + onAccount,
+      rolledBackPayment: payment.id,
+    });
     return { data: null, error: `Payment could not be posted to the cash book: ${cashError.message}` };
   }
 

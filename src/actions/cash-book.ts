@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { logFailure } from "@/lib/observability";
 import { cashEntrySchema, parseFormData } from "@/lib/validations";
 import { isDuplicateKey } from "@/lib/utils";
 import { todayInIndia } from "@/lib/format";
@@ -162,6 +163,12 @@ export async function createCashEntry(formData: FormData) {
       if (advanceId) {
         await supabase.from("salary_advances").delete().eq("id", advanceId);
       }
+      logFailure("createCashEntry.expense", expenseError.message, {
+        amount: v.amount,
+        category: v.category,
+        site: siteId,
+        rolledBackAdvance: advanceId,
+      });
       return { data: null, error: expenseError.message };
     }
     expenseId = (expense as { id: string }).id;

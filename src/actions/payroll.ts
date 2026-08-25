@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { logFailure } from "@/lib/observability";
 import { todayInIndia } from "@/lib/format";
 import type { PayrollRun, PayrollLine, Profile } from "@/types/database";
 
@@ -602,6 +603,11 @@ export async function payPayroll(
     .single();
 
   if (cashError) {
+    logFailure("payPayroll.cashBook", cashError.message, {
+      run: runId,
+      period: `${r.period_month}/${r.period_year}`,
+      net: netTotal,
+    });
     return { error: `Wages could not be posted to the cash book: ${cashError.message}` };
   }
 

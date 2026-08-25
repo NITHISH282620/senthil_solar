@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv } from "@/lib/env";
+import { logFailure } from "@/lib/observability";
 
 const SETUP_PATH = "/setup-required";
 
@@ -50,7 +51,13 @@ export async function updateSession(request: NextRequest) {
   try {
     const { data } = await supabase.auth.getUser();
     user = data.user;
-  } catch {
+  } catch (cause) {
+    // Without this, a Supabase outage looks like "everyone is being logged out"
+    // and leaves nothing in the logs to tell you why.
+    logFailure("middleware.getUser", "Supabase auth unreachable", {
+      path: pathname,
+      cause: cause instanceof Error ? cause.message : String(cause),
+    });
     if (pathname.startsWith("/login")) return supabaseResponse;
     const url = request.nextUrl.clone();
     url.pathname = "/login";

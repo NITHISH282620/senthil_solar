@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "./auth";
+import { logFailure } from "@/lib/observability";
 import { todayInIndia } from "@/lib/format";
 import { isDuplicateKey } from "@/lib/utils";
 import {
@@ -262,6 +263,11 @@ export async function reimburseExpense(
     .single();
 
   if (cashError) {
+    logFailure("reimburseExpense.cashBook", cashError.message, {
+      expense: e.expense_number,
+      amount: e.amount,
+      payee: e.paid_by,
+    });
     return { error: `Reimbursement could not be posted to the cash book: ${cashError.message}` };
   }
 
