@@ -211,3 +211,49 @@ would make the soft delete unrecoverable. `getDocuments` filters withdrawn rows.
   `20260812000600_rls.sql`; no policy has been executed against a live database.
 - **Materials, vendors, purchase orders** have full schemas and no UI (§17, §18).
 - **Owner dashboard** is still the inherited placeholder (§19).
+
+---
+
+## Phase — Production hardening (2026-08-24 / 25)
+
+Ran the full loop from the brief: security blocker, complete authorisation
+attack suite, ledger reconciliation, TDS, payroll allocation, attendance to
+payroll, expense accounting, pending-expense rule, a whole simulated day,
+owner and mobile experience, data-integrity invariants, failure testing,
+deployment check.
+
+**Provisioning.** Proved the signup hole rather than assuming it:
+`POST /auth/v1/signup` returned HTTP 200 with a usable token. Closed at two
+layers — `supabase/config.toml` (which did not exist, so every stack ran on
+permissive defaults) and a database trigger, so the invariant survives a
+dashboard change. The first discriminator I tried, a marker in
+`raw_app_meta_data`, **broke the owner's own provisioning path**: GoTrue writes
+`app_metadata` in an UPDATE after the INSERT, so at trigger time an
+admin-created user is identical to a signup. Caught by capturing what the
+trigger actually receives. Replaced with `employee_invitations`, which records
+authorisation before the account exists.
+
+**Authorisation.** `supabase/tests/authz_attacks.sql`: 130 attack assertions
+across 8 roles and every verb on every sensitive table, plus 9 legitimate
+actions that must keep working. 130 blocked, 9 allowed.
+
+**Money.** Ledger cases A–E reconcile to the paisa. Case D produced the one
+genuine gap: an overpayment was recorded and displayed nowhere, so the owner
+would bill the client again for money already banked. Client credit is now a
+stated rule, a view, and a control on the invoice.
+
+**Integrity.** `v_integrity_check` states eleven invariants as one query, and
+`supabase/tests/integrity.sql` injects defects to prove the check catches them —
+a vacuously empty check is worse than none, because it reassures.
+
+**Idempotency.** Money writes now carry a key per submission intent behind a
+partial unique index. Proven with a partial payment retry, where the invoice
+balance would have absorbed a second receipt and only the key stops it.
+
+**Interface.** Base UI's `Select.Value` renders the raw value unless `items` is
+supplied. Nothing passed it, so all 21 selects showed their underlying value —
+including a bare UUID wherever options are keyed by id. Fixed once in the
+wrapper by deriving `items` from the children.
+
+Full evidence in `TEST_RESULTS.md`; readiness and the remaining blocker in
+`PRODUCTION_READINESS.md`.

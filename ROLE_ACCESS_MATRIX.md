@@ -8,8 +8,10 @@ role's own JWT claim — not by reading policy source. The harness lives in
 Legend: **Y** allowed · **·** denied · **own** only their own rows ·
 **site** only sites they are assigned to or named on · **—** feature not built
 
-Last verified: 2026-08-24, against migrations through
-`20260824000100_security_and_money_fixes.sql`.
+Last verified: 2026-08-25, against migrations through
+`20260824000800_dashboard_gaps.sql`. Re-verified by
+`supabase/tests/authz_attacks.sql` — 130 attack assertions blocked, 9
+legitimate actions allowed.
 
 ## Reading
 
@@ -31,9 +33,12 @@ Last verified: 2026-08-24, against migrations through
 | Attendance | Y | Y | Y | site | site | · | own+site | · |
 | Staff roster — names, phone, trade | Y | Y | Y | site | site | own | site | own |
 | **Staff pay, bank, Aadhaar** | Y | · | · | · | · | · | own | · |
-| Company settings | Y | Y | Y | Y | Y | Y | Y | Y |
+| Company settings (GST, PAN, address) | Y | Y | Y | · | · | · | · | · |
+| Shift / OT / geofence rules | Y | Y | Y | Y | Y | Y | Y | · |
 | Audit trail | Y | · | · | · | · | · | · | · |
-| Material catalogue | Y | Y | Y | Y | Y | Y | Y | Y |
+| Material catalogue | Y | Y | Y | Y | Y | Y | Y | · |
+| Client credit held | Y | Y | Y | · | · | · | · | · |
+| What the business owes staff | Y | Y | Y | · | · | · | · | · |
 | Purchase orders / GRN | Y | Y | Y | · | · | Y | · | · |
 | Documents | Y | scoped | scoped | site | site | scoped | own | · |
 
@@ -65,6 +70,10 @@ Last verified: 2026-08-24, against migrations through
 | Edit own contact details | Y | Y | Y | Y | Y | Y | Y | Y |
 | Company settings | Y | · | · | · | · | · | · | · |
 | Stock movements | Y | Y | · | site | site | Y | · | · |
+| Reimburse an expense claim | Y | Y | Y | · | · | · | · | · |
+| Allocate client credit | Y | Y | Y | · | · | · | · | · |
+| **Invite an employee account** | Y | · | · | · | · | · | · | · |
+| Deactivate an employee | Y | · | · | · | · | · | · | · |
 | Delete anything | Y | · | · | · | · | · | · | · |
 
 ## Notes on specific cells
@@ -95,6 +104,24 @@ offered. See `BUSINESS_GAP_ANALYSIS.md`.
 **Company settings are readable by everyone**, including the GST, PAN and CIN
 numbers. The policy is `USING (true)`. Low severity — these appear on every
 invoice the company issues — but it is wider than it needs to be.
+
+**No account exists that the owner did not invite.** `auth.users` inserts are
+refused without an unconsumed `employee_invitations` row, which only the owner
+can write. The one exception is the very first account on a fresh deployment,
+which becomes the owner — otherwise a new install could never be started.
+
+**The last owner cannot be removed.** Demoting, deactivating or soft-deleting
+the only active owner is refused. Without this, one mistaken edit locks the
+business out of its own system with no principal able to restore anyone.
+
+**A deactivated employee cannot sign in.** Deactivation bans the auth account,
+and `getCurrentUser` turns away any dormant or deleted profile — previously they
+could hold a session and browse an application full of blank screens.
+
+**Company settings are no longer world-readable.** GST, PAN, CIN and the
+registered address were visible to every authenticated user, including a
+self-registered stranger. Field staff read `v_work_settings` instead, which
+carries only the shift, overtime and geofence rules.
 
 **Documents are scoped by entity type**: site documents follow site access,
 commercial documents follow money access, and anything marked confidential is
