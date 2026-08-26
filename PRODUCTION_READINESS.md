@@ -15,7 +15,8 @@ BUILD             PASS   npm run verify
 SECRETS           CLEAN  none in the tree, none in git history
 DEPLOYMENT        FAIL   see the blocker below
 
-PRODUCTION READINESS   91 / 100
+PRODUCTION READINESS   91 / 100   (code)
+                        0 / 100   (the deployment itself)
 ```
 
 ## GO / NO-GO
@@ -26,36 +27,37 @@ NO-GO
 
 Not because of the code. Because of where the code has been applied.
 
-### The blocker
+### The blockers
 
-**The Supabase project in `.env.local` does not exist.**
+The Supabase project was **paused**, not deleted — resumed and verified live on
+2026-08-26. The earlier "project does not exist" was wrong: a paused project
+drops its DNS record and is indistinguishable from a deleted one from outside.
 
-The previous report inferred that outbound network access was blocked. Network
-access now works — supabase.com, api.supabase.com, vercel.com and npm all
-respond. Re-tested with that access, the finding is different and worse: the
-project hostname has no DNS record at all, checked three ways, while
-`supabase.co` itself resolves normally. A *paused* Supabase project still
-resolves and answers with a paused response. No record means the project was
-deleted, or the reference is wrong.
+With it live, the real state is measurable, and it is four things:
 
-So there is no production database. Nothing has been deployed to it, and
-migrations 0009–0016 exist only on the local development database. Whichever
-project replaces it will start from the schema where:
+1. **The production database is empty.** Zero of sixteen migrations applied —
+   PostgREST reports every application table absent and `next_document_number`
+   missing. Not "behind"; unmigrated.
+2. **Public signup is enabled** on the project right now
+   (`disable_signup: false`).
+3. **The deployed code is 20 commits behind**, predating every fix from all
+   three hardening passes. The Vercel deployment at `senthil-solar.vercel.app`
+   is live and its `NEXT_PUBLIC_*` variables are configured, but
+   `SUPABASE_SECRET_KEY` is absent, so employee creation and deactivation
+   cannot work.
+4. **No storage bucket exists**, so document upload has nowhere to write.
 
-* any authenticated user can run `UPDATE profiles SET role='owner'` on their own
-  row and take over the company
-* anyone on the internet can register and obtain a session
-* every corporate invoice sits part-paid forever because TDS never settles it
-* a day split between two sites pays two days' wages
+None of the four can be done from here: applying migrations needs a Supabase
+access token or the database password, changing auth settings and creating
+buckets need the dashboard, and setting a Vercel variable needs a Vercel token.
+This machine has none of them.
 
-The application code in this repository is ready. The database it talks to is
-not, and shipping the code without the migrations changes nothing about the
-risk.
-
-This environment has no outbound network, so I could not reach that project to
-apply them, confirm its current schema, or test a production login. Those four
-statements are inferences from the migration history, not observations of that
-project — verify before trusting them.
+What *has* been done is the rehearsal. All 16 migrations were applied to a
+pristine database — the same state production is in — and the full suite run
+there: 130 attacks blocked, 9 legitimate operations allowed, 0 integrity
+violations, the §9 money flow reconciling to the paisa and the §10 payroll
+splitting 700/700 from a single 1,400 day. `scripts/go-live.sh` walks that
+proven path.
 
 ### Minimum work to reach GO
 

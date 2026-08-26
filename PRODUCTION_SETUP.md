@@ -4,45 +4,66 @@ The exact procedure to put Sentil Solar Ops into production. No secrets appear
 in this file and none should be added to it.
 
 Written after the application was verified against a real database and a real
-browser. What has **not** been verified is the hosted project itself — see
-"Before you start".
+browser, and after the hosted project itself was inspected directly — see
+"Verified production state".
 
 ---
 
-## Before you start: the project in `.env.local` does not exist
+## Verified production state (2026-08-26)
 
-`.env.local` points at a Supabase project whose hostname does not resolve:
+The project was **paused**, not deleted. It has been resumed and is live. An
+earlier report concluded it did not exist; that was wrong — a paused Supabase
+project drops its DNS record, which is indistinguishable from a deleted one
+from outside. Corrected here.
 
+Measured directly against the resumed project:
+
+| | State |
+|---|---|
+| Project | **exists, active** — `znwvqdyrvtteirpjecfx` |
+| Auth endpoint | live, GoTrue v2.195.0 |
+| Storage endpoint | live, **0 buckets** |
+| Database schema | **empty — 0 of 16 migrations applied.** PostgREST reports every application table absent, and `next_document_number` missing |
+| Existing business data | none found through the API — nothing to protect, and nothing to lose |
+| Public signup | **ENABLED** (`disable_signup: false`) |
+| `SUPABASE_SECRET_KEY` | **not set** in `.env.local` |
+| Vercel | **deployed and live** at `senthil-solar.vercel.app`, `NEXT_PUBLIC_*` configured |
+| Deployed code | **20 commits behind**, predating every fix from all three hardening passes |
+
+So production is a working deployment of the original code, pointed at an empty
+database, with the signup door open. Nobody can use it — there is no `profiles`
+table for a session to resolve against — and it would be unsafe the moment a
+schema appeared underneath the old code.
+
+The whole of this has been rehearsed: all 16 migrations were applied to a
+pristine database and the full suite run there — 130 attacks blocked, 9
+legitimate operations allowed, 0 integrity violations, and the §9 and §10
+money and payroll flows reconciling exactly. Production is in that same
+pristine state, so `scripts/go-live.sh` walks a path already proven.
+
+Run it:
+
+```bash
+./scripts/go-live.sh
 ```
-$ getent hosts <ref>.supabase.co     → no result
-$ getent hosts supabase.co           → resolves (so DNS itself is fine)
-```
 
-A paused Supabase project still resolves and answers with a "paused" response.
-No DNS record at all means the project was **deleted, or the reference is
-wrong**. Nothing has been deployed to it and nothing can be until it is
-replaced.
-
-So step 1 is not "push migrations". It is "decide which project this is".
-
----
+It links to the existing project, backs up first, shows you the migration list
+and waits for confirmation, pushes, then verifies. Four things follow that no
+script can do: turn signup off, create the storage bucket, set
+`SUPABASE_SECRET_KEY` on Vercel, and push the code.
 
 ## 1. Supabase project
 
-Either create a new project or identify the correct existing one.
+**The project already exists. Do not create another.**
 
 ```bash
 npx supabase login                       # opens a browser for the access token
-npx supabase projects list               # find or confirm the ref
-npx supabase link --project-ref <ref>
+npx supabase link --project-ref znwvqdyrvtteirpjecfx
 ```
 
-Region: choose one close to the users (`ap-south-1` for India). Record the
-database password somewhere safe at creation time — it cannot be read back
-later, only reset.
-
-If the project is new, nothing else is needed here. If it is an existing
-project that already carries some of this schema, do step 2 carefully.
+If it ever pauses again (free tier pauses on inactivity), the symptom is exactly
+what was seen here: DNS stops resolving and every check reports the project
+missing. Resume it in the dashboard rather than concluding it is gone.
 
 ## 2. Migrations
 
