@@ -30,3 +30,17 @@ FROM v_integrity_check;
 SELECT CASE WHEN count(*) <= 1 THEN 'OK   owners: '||count(*)
             ELSE 'CHECK more than one owner: '||count(*) END
 FROM profiles WHERE role='owner' AND is_active AND deleted_at IS NULL;
+
+-- Accounts may already exist in auth.users from before the schema did — the
+-- application has been deployed and reachable since 15 Aug. handle_new_user()
+-- only fires on INSERT, so any such account now has NO profile row: it can
+-- authenticate and then resolve to nothing. And because "the first account
+-- becomes the owner" also keys off profiles being empty, the owner would be
+-- whoever is created NEXT, not whoever was there first.
+SELECT CASE
+  WHEN u.n = 0 THEN 'OK   auth.users is empty — the next account created becomes the owner'
+  WHEN p.n = 0 THEN 'CHECK '||u.n||' auth user(s) predate the schema and have no profile. '||
+                    'Provision the owner deliberately; do not assume the first login becomes owner.'
+  ELSE 'OK   auth users: '||u.n||', profiles: '||p.n
+END
+FROM (SELECT count(*) n FROM auth.users) u, (SELECT count(*) n FROM profiles) p;
