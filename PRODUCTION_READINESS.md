@@ -4,19 +4,31 @@ Assessed 2026-08-25 against a live database and a real browser, running a PRODUC
 `TEST_RESULTS.md`, permissions in `ROLE_ACCESS_MATRIX.md`, unbuilt work in
 `BUSINESS_GAP_ANALYSIS.md`.
 
-```
-SECURITY          100%   130/130 attacks blocked, 9/9 legitimate actions still work
-DATA INTEGRITY    100%   11 invariants, self-tested, 0 violations
-FINANCIAL         100%   every ledger scenario reconciles to the paisa
-CORE WORKFLOW     100%   full business chain completed in a PRODUCTION build
-ROLE ISOLATION    100%   8/8 roles, read and write, enforced in the database
-MOBILE            100%   12 pages at 375px: no overflow, no UUIDs, no console errors
-BUILD             PASS   npm run verify
-SECRETS           CLEAN  none in the tree, none in git history
-DEPLOYMENT        FAIL   see the blocker below
+Three tiers of evidence, never mixed:
 
-PRODUCTION READINESS   91 / 100   (code)
-                        0 / 100   (the deployment itself)
+* **LOCAL VERIFIED** — the development database and a production build served
+  from this machine.
+* **REHEARSAL VERIFIED** — a pristine database built only from the 16
+  migrations, which is exactly the state production was in.
+* **PRODUCTION VERIFIED** — the live Supabase project and the live Vercel
+  deployment.
+
+```
+                          LOCAL      REHEARSAL   PRODUCTION
+Supabase project active     —            —          PASS
+Correct project targeted    —            —          PASS   znwvqdyrvtteirpjecfx
+Migrations 16/16          PASS         PASS         NOT APPLIED  (0/16)
+Schema: 48 tables         PASS         PASS         absent
+RLS 130 blocked / 9 ok    PASS         PASS         not run (no db credentials)
+Financial 11/11           PASS         PASS         not run (no db credentials)
+Core workflow             PASS         PASS         not testable (no schema)
+Storage bucket              —            —          FAIL   0 buckets
+Public signup disabled    PASS         PASS         FAIL   still enabled
+Vercel latest commit        —            —          PASS   e3aed79, Production
+Production env vars         —            —          PARTIAL  secret key absent
+Mobile 375/390/412        PASS           —          PASS   login page
+Secrets                   PASS           —          PASS   incl. pushed history
+Build                     PASS           —          PASS
 ```
 
 ## GO / NO-GO
@@ -40,17 +52,15 @@ With it live, the real state is measurable, and it is four things:
    missing. Not "behind"; unmigrated.
 2. **Public signup is enabled** on the project right now
    (`disable_signup: false`).
-3. **The deployed code is 20 commits behind**, predating every fix from all
-   three hardening passes. The Vercel deployment at `senthil-solar.vercel.app`
-   is live and its `NEXT_PUBLIC_*` variables are configured, but
-   `SUPABASE_SECRET_KEY` is absent, so employee creation and deactivation
-   cannot work.
+3. ~~The deployed code is 20 commits behind~~ **DONE** — 22 commits pushed and
+   Vercel deployed `e3aed79` to Production successfully. `SUPABASE_SECRET_KEY`
+   is still absent, so employee creation and deactivation cannot work.
 4. **No storage bucket exists**, so document upload has nowhere to write.
 
-None of the four can be done from here: applying migrations needs a Supabase
-access token or the database password, changing auth settings and creating
-buckets need the dashboard, and setting a Vercel variable needs a Vercel token.
-This machine has none of them.
+Three of the four still cannot be done from here: applying migrations needs a
+Supabase access token or the database password, and changing auth settings,
+creating buckets and setting a Vercel variable all need dashboard access. This
+machine has none of those. The code deployment was possible and has been done.
 
 What *has* been done is the rehearsal. All 16 migrations were applied to a
 pristine database — the same state production is in — and the full suite run

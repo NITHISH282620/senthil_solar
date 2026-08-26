@@ -293,3 +293,43 @@ Zero integrity violations. No secrets in the tree or in git history.
 
 Verdict and the exact remaining work: `PRODUCTION_READINESS.md`. Procedure:
 `PRODUCTION_SETUP.md`.
+
+
+---
+
+## Phase — Go-live execution (2026-08-26)
+
+**Corrected first:** the Supabase project was paused, not deleted. A paused
+project drops its DNS record, which from outside is indistinguishable from
+deletion. Resumed by the owner and verified live.
+
+**Inspecting the go-live script before running it found three defects in it**,
+which is the reason for inspecting scripts before running them:
+
+* `supabase db execute` does not exist — the CLI's only `db` subcommands are
+  diff, dump, push, pull and reset. Both the verification step and the
+  instructions for running the suites against production were commands that
+  would have simply failed. Replaced with `scripts/psql-prod.sh`, which runs a
+  real psql from the postgres image on the host network, since this machine has
+  no postgres client and the database container cannot reach the pooler.
+* `backups/` was not gitignored, and the repository is public — a production
+  data dump was one `git add -A` from being published.
+* Nothing asserted the hardcoded project ref still matched `.env.local`.
+
+`verify-deploy.sql` also gained a check the procedure lacked: the app has been
+deployed and reachable since 15 August, so `auth.users` may hold accounts
+created before any schema existed. Those accounts now have no profile, and
+"first account becomes owner" keys off `profiles` being empty — so the owner
+would be whoever is created next, not whoever was there first.
+
+**Done in production:** 22 commits pushed; Vercel built and deployed `e3aed79`
+to Production; mobile verified at 375/390/412; secrets clean including the
+newly pushed history.
+
+**Still blocked, needing credentials this machine does not have:** migrations
+(0/16 applied), the storage bucket, disabling public signup, and
+`SUPABASE_SECRET_KEY` on Vercel.
+
+Rehearsed rather than guessed: all 16 migrations applied to a pristine database
+with the full suite passing there — 130 blocked, 9 allowed, 0 violations, money
+and payroll reconciling exactly.

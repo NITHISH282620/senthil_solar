@@ -561,3 +561,45 @@ a short `#7a5fec49` reference rather than 36 characters of noise.
 | `NEXT_PUBLIC_*` in the client bundle | the Supabase URL never reaches it |
 | Secrets in the tree or git history | none |
 | Server Actions origin check | Vercel sets `X-Forwarded-Host`; no config needed, and adding `allowedOrigins` would weaken CSRF for no gain |
+
+
+---
+
+# Go-live execution (2026-08-26)
+
+## 30. What was verified against the real production project
+
+| Check | Method | Result |
+|---|---|---|
+| Project exists and is active | DNS + auth/storage/REST endpoints | **PASS** — GoTrue v2.195.0 |
+| Correct project targeted | ref parsed from `.env.local` vs script constant | **PASS** — both `znwvqdyrvtteirpjecfx` |
+| Application schema | PostgREST, 10 tables probed | **0/16 migrations** — every table absent, `next_document_number` missing |
+| Existing business data | PostgREST | none found. `auth.users` not readable without the service key |
+| Storage buckets | `/storage/v1/bucket` | `[]` — none |
+| Public signup | `/auth/v1/settings` | **enabled** (`disable_signup: false`) |
+| Vercel deployment | GitHub deployments API | **PASS** — `e3aed79`, environment Production, state success |
+| Live site | HTTP | `/login` 200, auth path works ("Invalid login credentials" on a bad login) |
+| Mobile 375 / 390 / 412 | real browser on the production URL | **PASS** — no overflow, no UUIDs, no console errors |
+| Secrets | tree + all pushed history + served HTML | **PASS** |
+
+## 31. What could not be run against production, and why
+
+`supabase db` has no subcommand for executing SQL against a linked project, and
+this machine has no database credentials — no access token, no database
+password, no service key. The direct `db.<ref>.supabase.co` host is IPv6-only
+and unreachable here; the session pooler is reachable but needs the password.
+
+So these are **REHEARSAL VERIFIED** only, on a pristine database built from the
+16 migrations — the exact state production is in:
+
+* 16/16 migrations applied cleanly, in order
+* 48 tables, 15 views, 106 RLS policies, 92 functions, 102 triggers
+* 130 attacks blocked, 0 allowed, 9/9 legitimate operations, 0 skipped
+* 11/11 financial invariants, 0 violations
+* bootstrap: first account becomes owner; uninvited signup refused; invited
+  account active with the intended role; invitation single-use
+* §9 money: ₹4,00,000 → ₹2,00,000 outstanding → ₹0 → ₹50,000 held as credit
+* §10 payroll: one man, one day, two sites → ₹1,400 total, ₹700 + ₹700
+
+`scripts/psql-prod.sh` exists so these can be run against production the moment
+`PROD_DB_URL` is available.
