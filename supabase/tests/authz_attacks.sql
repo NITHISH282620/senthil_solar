@@ -20,6 +20,15 @@
 \set QUIET on
 SET client_min_messages = warning;
 
+-- Two sites to test the boundary with, resolved rather than hardcoded. The
+-- suite previously named the UUIDs of one developer's seed data, so against any
+-- other database — production included — the site-scoped assertions silently
+-- targeted rows that do not exist. Attacks still reported BLOCKED, which looks
+-- like success and proves nothing.
+CREATE OR REPLACE VIEW _sites AS
+SELECT id, row_number() OVER (ORDER BY created_at, site_code) AS n
+FROM sites WHERE deleted_at IS NULL;
+
 CREATE OR REPLACE FUNCTION _attempt(p_role text, p_sql text) RETURNS text
 LANGUAGE plpgsql AS $fn$
 DECLARE n bigint; v_uid uuid;
@@ -520,27 +529,27 @@ SELECT 'client: DELETE expenses' AS attack, _attempt('client', 'DELETE FROM expe
 ROLLBACK;
 
 BEGIN;
-SELECT 'engineer: read Site B' AS attack, _attempt('engineer', 'SELECT 1 FROM sites WHERE id=''1c1c2f09-834a-4609-9e1c-9d0a312106d5''') AS result;
+SELECT 'engineer: read Site B' AS attack, _attempt('engineer', 'SELECT 1 FROM sites WHERE id=(SELECT id FROM _sites WHERE n = 2)') AS result;
 ROLLBACK;
 
 BEGIN;
-SELECT 'engineer: read Site B attendance' AS attack, _attempt('engineer', 'SELECT 1 FROM attendance WHERE site_id=''1c1c2f09-834a-4609-9e1c-9d0a312106d5''') AS result;
+SELECT 'engineer: read Site B attendance' AS attack, _attempt('engineer', 'SELECT 1 FROM attendance WHERE site_id=(SELECT id FROM _sites WHERE n = 2)') AS result;
 ROLLBACK;
 
 BEGIN;
-SELECT 'engineer: write expense on Site B' AS attack, _attempt('engineer', 'INSERT INTO expenses(expense_number,site_id,category,title,amount,created_by) VALUES(''ATK1'',''1c1c2f09-834a-4609-9e1c-9d0a312106d5'',''fuel'',''x'',5,(SELECT id FROM _who WHERE role=''engineer''))') AS result;
+SELECT 'engineer: write expense on Site B' AS attack, _attempt('engineer', 'INSERT INTO expenses(expense_number,site_id,category,title,amount,created_by) VALUES(''ATK1'',(SELECT id FROM _sites WHERE n = 2),''fuel'',''x'',5,(SELECT id FROM _who WHERE role=''engineer''))') AS result;
 ROLLBACK;
 
 BEGIN;
-SELECT 'engineer: mark attendance on Site B' AS attack, _attempt('engineer', 'INSERT INTO attendance(employee_id,site_id,date,status) VALUES((SELECT id FROM _who WHERE role=''worker''),''1c1c2f09-834a-4609-9e1c-9d0a312106d5'',CURRENT_DATE,''present'')') AS result;
+SELECT 'engineer: mark attendance on Site B' AS attack, _attempt('engineer', 'INSERT INTO attendance(employee_id,site_id,date,status) VALUES((SELECT id FROM _who WHERE role=''worker''),(SELECT id FROM _sites WHERE n = 2),CURRENT_DATE,''present'')') AS result;
 ROLLBACK;
 
 BEGIN;
-SELECT 'engineer: reassign crew to own site' AS attack, _attempt('engineer', 'INSERT INTO site_assignments(site_id,employee_id,role_on_site,assigned_date) VALUES(''fd70abe1-50d3-4b4b-983b-2e9fe3ce86ad'',(SELECT id FROM _who WHERE role=''client''),''worker'',CURRENT_DATE)') AS result;
+SELECT 'engineer: reassign crew to own site' AS attack, _attempt('engineer', 'INSERT INTO site_assignments(site_id,employee_id,role_on_site,assigned_date) VALUES((SELECT id FROM _sites WHERE n = 1),(SELECT id FROM _who WHERE role=''client''),''worker'',CURRENT_DATE)') AS result;
 ROLLBACK;
 
 BEGIN;
-SELECT 'worker: mark attendance for someone else' AS attack, _attempt('worker', 'INSERT INTO attendance(employee_id,site_id,date,status) VALUES((SELECT id FROM _who WHERE role=''owner''),''fd70abe1-50d3-4b4b-983b-2e9fe3ce86ad'',CURRENT_DATE,''present'')') AS result;
+SELECT 'worker: mark attendance for someone else' AS attack, _attempt('worker', 'INSERT INTO attendance(employee_id,site_id,date,status) VALUES((SELECT id FROM _who WHERE role=''owner''),(SELECT id FROM _sites WHERE n = 1),CURRENT_DATE,''present'')') AS result;
 ROLLBACK;
 
 BEGIN;
@@ -592,11 +601,11 @@ SELECT 'accountant: record a client payment' AS action, _attempt('accountant', '
 ROLLBACK;
 
 BEGIN;
-SELECT 'supervisor: mark crew at own site' AS action, _attempt('supervisor', 'INSERT INTO attendance(employee_id,site_id,date,status) VALUES((SELECT id FROM _who WHERE role=''worker''),''fd70abe1-50d3-4b4b-983b-2e9fe3ce86ad'',CURRENT_DATE-1,''present'')') AS result;
+SELECT 'supervisor: mark crew at own site' AS action, _attempt('supervisor', 'INSERT INTO attendance(employee_id,site_id,date,status) VALUES((SELECT id FROM _who WHERE role=''worker''),(SELECT id FROM _sites WHERE n = 1),CURRENT_DATE-1,''present'')') AS result;
 ROLLBACK;
 
 BEGIN;
-SELECT 'engineer: expense at own site' AS action, _attempt('engineer', 'INSERT INTO expenses(expense_number,site_id,category,title,amount,created_by) VALUES(''OK1'',''fd70abe1-50d3-4b4b-983b-2e9fe3ce86ad'',''fuel'',''diesel'',500,(SELECT id FROM _who WHERE role=''engineer''))') AS result;
+SELECT 'engineer: expense at own site' AS action, _attempt('engineer', 'INSERT INTO expenses(expense_number,site_id,category,title,amount,created_by) VALUES(''OK1'',(SELECT id FROM _sites WHERE n = 1),''fuel'',''diesel'',500,(SELECT id FROM _who WHERE role=''engineer''))') AS result;
 ROLLBACK;
 
 BEGIN;

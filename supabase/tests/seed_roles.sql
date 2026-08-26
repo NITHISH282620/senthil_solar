@@ -48,4 +48,32 @@ SET role = _p.role,
                           THEN 30000 END
 FROM _p WHERE p.id = _p.uid;
 
+-- Fixtures the legitimate-operations block depends on. Without these it reports
+-- BLOCKED for actions that are actually allowed — a false alarm that reads
+-- exactly like a real authorisation failure.
+INSERT INTO site_assignments (site_id, employee_id, role_on_site, assigned_date, is_active)
+SELECT s.id, p.id, p.role, CURRENT_DATE, true
+FROM (SELECT id FROM sites WHERE deleted_at IS NULL ORDER BY created_at, site_code LIMIT 1) s
+CROSS JOIN profiles p
+WHERE p.email IN ('t.sup2@test', 't.engineer@test')
+ON CONFLICT DO NOTHING;
+
+-- One payslip, so "worker reads own payslip" has something to read.
+INSERT INTO payroll_runs (period_month, period_year, status)
+VALUES (1, 2020, 'draft')
+ON CONFLICT (period_month, period_year) DO NOTHING;
+
+-- For the worker _who picks: DISTINCT ON (role) ORDER BY role, created_at, i.e.
+-- the earliest-created active worker. Naming a different one would leave the
+-- assertion reading a payslip that is not its own and reporting BLOCKED.
+INSERT INTO payroll_lines (payroll_run_id, employee_id, wage_mode, present_days,
+                           rate_used, basic_amount)
+SELECT r.id, p.id, 'daily', 1, 700, 700
+FROM payroll_runs r,
+     (SELECT id FROM profiles
+       WHERE role = 'worker' AND is_active AND deleted_at IS NULL
+       ORDER BY created_at LIMIT 1) p
+WHERE r.period_month = 1 AND r.period_year = 2020
+ON CONFLICT (payroll_run_id, employee_id) DO NOTHING;
+
 COMMIT;
