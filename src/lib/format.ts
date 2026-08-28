@@ -13,6 +13,22 @@ export function formatCurrency(amount: number): string {
 }
 
 /**
+ * A duration in hours as "2hr 30min" rather than the decimal "2.5" nobody on
+ * site reads at a glance.
+ */
+export function formatDuration(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined || !Number.isFinite(hours) || hours <= 0) {
+    return "—";
+  }
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}hr`;
+  return `${h}hr ${m}min`;
+}
+
+/**
  * Format a date string to readable format
  */
 export function formatDate(dateString: string | null, pattern = "dd MMM yyyy"): string {

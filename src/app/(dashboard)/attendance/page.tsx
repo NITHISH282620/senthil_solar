@@ -3,9 +3,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getAttendance } from "@/actions/attendance";
 import { getSiteOptions } from "@/actions/sites";
+import { getCompanySettings } from "@/actions/settings";
 import { CrewAttendanceSheet } from "@/components/shared/crew-attendance-sheet";
 import { getCurrentUser } from "@/actions/auth";
-import { formatDate, todayInIndia } from "@/lib/format";
+import { formatDate, formatDuration, todayInIndia } from "@/lib/format";
 import { Calendar, CheckCircle2, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 
@@ -39,10 +40,15 @@ export default async function AttendancePage({ searchParams }: PageProps) {
   const today = todayInIndia();
   const dateParam = typeof resolvedParams.date === "string" ? resolvedParams.date : today;
 
-  const [{ data: attendanceData }, { data: sites }] = await Promise.all([
+  const [{ data: attendanceData }, { data: sites }, { data: settings }] = await Promise.all([
     getAttendance({ date: dateParam }),
     getSiteOptions(),
+    getCompanySettings(),
   ]);
+
+  // "HH:mm:ss" from Postgres -> "HH:mm" for the <input type="time"> pickers.
+  const shiftStart = settings?.shift_start_time?.slice(0, 5) ?? "09:00";
+  const shiftEnd = settings?.shift_end_time?.slice(0, 5) ?? "17:00";
 
   const presentCount = attendanceData?.filter(a => a.status === "present" || a.status === "half_day").length || 0;
   const absentCount = attendanceData?.filter(a => a.status === "absent").length || 0;
@@ -55,7 +61,12 @@ export default async function AttendancePage({ searchParams }: PageProps) {
         description={`Attendance records for ${formatDate(dateParam, "EEEE, dd MMM yyyy")}`}
       />
 
-      <CrewAttendanceSheet sites={sites ?? []} today={today} />
+      <CrewAttendanceSheet
+        sites={sites ?? []}
+        today={today}
+        defaultShiftStart={shiftStart}
+        defaultShiftEnd={shiftEnd}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -105,13 +116,14 @@ export default async function AttendancePage({ searchParams }: PageProps) {
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Check In</th>
                 <th className="px-4 py-3 font-medium">Check Out</th>
+                <th className="px-4 py-3 font-medium">Duration</th>
                 <th className="px-4 py-3 font-medium">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {attendanceData?.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     No attendance records for this date.
                   </td>
                 </tr>
@@ -144,6 +156,14 @@ export default async function AttendancePage({ searchParams }: PageProps) {
                           </span>
                         </div>
                       ) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium">{formatDuration(record.worked_hours)}</span>
+                      {record.overtime_hours > 0 && (
+                        <span className="ml-1.5 text-xs text-amber-600">
+                          (+{formatDuration(record.overtime_hours)} OT)
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {record.notes || "—"}

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Pencil } from "lucide-react";
+import { Pencil, Printer } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -68,6 +68,14 @@ export default async function QuotationDetailPage({ params }: PageProps) {
     <div className="space-y-6">
       <PageHeader title="Quotation Details">
         <div className="flex items-center gap-2">
+          <Link
+            href={`/quotations/${quotation.id}/print`}
+            target="_blank"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            <Printer className="mr-1 h-4 w-4" />
+            Print / PDF
+          </Link>
           {canEdit && isEditable && (
             <Link
               href={`/quotations/${quotation.id}/edit`}

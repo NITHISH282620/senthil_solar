@@ -248,6 +248,9 @@ export interface CrewMember {
   /** What is already recorded for this person on this date, if anything. */
   status: string | null;
   overtime_hours: number;
+  /** "HH:mm" in Asia/Kolkata, so the sheet can prefill from what was recorded. */
+  check_in_time: string | null;
+  check_out_time: string | null;
 }
 
 /**
@@ -283,7 +286,7 @@ export async function getCrewForDate(
     supabase.from("v_directory").select("id, full_name, employee_code").in("id", ids),
     supabase
       .from("attendance")
-      .select("employee_id, status, overtime_hours")
+      .select("employee_id, status, overtime_hours, check_in_at, check_out_at")
       .eq("site_id", siteId)
       .eq("date", date)
       .is("deleted_at", null),
@@ -295,10 +298,27 @@ export async function getCrewForDate(
     )
   );
   const markedById = new Map(
-    ((marked ?? []) as { employee_id: string; status: string; overtime_hours: number }[]).map(
-      (m) => [m.employee_id, m]
-    )
+    (
+      (marked ?? []) as {
+        employee_id: string;
+        status: string;
+        overtime_hours: number;
+        check_in_at: string | null;
+        check_out_at: string | null;
+      }[]
+    ).map((m) => [m.employee_id, m])
   );
+
+  // "HH:mm" in Asia/Kolkata, from a stored UTC timestamp.
+  const toLocalTime = (iso: string | null) =>
+    iso
+      ? new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(new Date(iso))
+      : null;
 
   return {
     data: rows.map((r) => {
@@ -311,6 +331,8 @@ export async function getCrewForDate(
         role_on_site: r.role_on_site,
         status: existing?.status ?? null,
         overtime_hours: Number(existing?.overtime_hours ?? 0),
+        check_in_time: toLocalTime(existing?.check_in_at ?? null),
+        check_out_time: toLocalTime(existing?.check_out_at ?? null),
       };
     }),
     error: null,
@@ -332,7 +354,13 @@ export async function getCrewForDate(
 export async function markCrewAttendance(
   siteId: string,
   date: string,
-  entries: { employee_id: string; status: string; overtime_hours?: number }[]
+  entries: {
+    employee_id: string;
+    status: string;
+    /** "HH:mm", Asia/Kolkata. Required when status is present/half_day. */
+    check_in_time?: string;
+    check_out_time?: string;
+  }[]
 ) {
   const currentUser = await getCurrentUser();
   if (
@@ -351,27 +379,85 @@ export async function markCrewAttendance(
     return { error: "Attendance cannot be marked for a future date." };
   }
 
-  const allowed = new Set(["present", "absent", "half_day", "leave", "holiday", "week_off"]);
+  // Leave now comes only through the leave-request/approval workflow, not a
+  // quick tap in the field — a supervisor cannot grant paid leave from a phone.
+  const allowed = new Set(["present", "absent", "half_day"]);
   for (const e of entries) {
     if (!allowed.has(e.status)) return { error: `Unknown attendance status: ${e.status}` };
   }
 
   const supabase = await createClient();
 
-  // day_fraction is derived by trigger from status, so it is deliberately not
-  // sent here — the two can never drift apart again.
-  const { error } = await supabase.from("attendance").upsert(
-    entries.map((e) => ({
+  // The overtime threshold is a company setting, not a constant — mirrors
+  // checkOut()'s self-service path so a supervisor's entry and a worker's own
+  // check-out agree on what counts as overtime.
+  const { data: settings } = await supabase
+    .from("company_settings")
+    .select("ot_after_hours")
+    .limit(1)
+    .maybeSingle();
+  const otAfterHours = Number(
+    (settings as { ot_after_hours?: number | null } | null)?.ot_after_hours ?? 8
+  );
+
+  const rows: {
+    employee_id: string;
+    site_id: string;
+    date: string;
+    status: string;
+    check_in_at: string | null;
+    check_out_at: string | null;
+    worked_hours: number | null;
+    overtime_hours: number;
+    source: string;
+    marked_by: string;
+  }[] = [];
+
+  for (const e of entries) {
+    const needsTime = e.status === "present" || e.status === "half_day";
+
+    let checkInAt: string | null = null;
+    let checkOutAt: string | null = null;
+    let workedHours: number | null = null;
+    let overtimeHours = 0;
+
+    if (needsTime) {
+      if (!e.check_in_time || !e.check_out_time) {
+        return { error: "Enter the time worked for everyone marked present or half day." };
+      }
+      // A fixed +05:30 offset, not the server's local zone, so this is correct
+      // regardless of where the app happens to be deployed.
+      checkInAt = `${date}T${e.check_in_time}:00+05:30`;
+      checkOutAt = `${date}T${e.check_out_time}:00+05:30`;
+
+      workedHours =
+        (new Date(checkOutAt).getTime() - new Date(checkInAt).getTime()) / 3_600_000;
+
+      if (!(workedHours > 0)) {
+        return { error: "Check-out time must be after check-in time." };
+      }
+      overtimeHours = Math.max(0, Math.round((workedHours - otAfterHours) * 100) / 100);
+    }
+
+    rows.push({
       employee_id: e.employee_id,
       site_id: siteId,
       date,
       status: e.status,
-      overtime_hours: Math.max(0, Number(e.overtime_hours ?? 0)),
+      check_in_at: checkInAt,
+      check_out_at: checkOutAt,
+      worked_hours: workedHours !== null ? Math.round(workedHours * 100) / 100 : null,
+      overtime_hours: overtimeHours,
       source: "supervisor",
       marked_by: currentUser.id,
-    })),
-    { onConflict: "employee_id,site_id,date" }
-  );
+    });
+  }
+
+  // day_fraction is derived by trigger from status, so it is deliberately not
+  // sent here — the two can never drift apart again.
+  const { error } = await supabase
+    .from("attendance")
+    .upsert(rows, { onConflict: "employee_id,site_id,date" });
 
   // RLS refuses a site the caller does not run, and the locked-attendance
   // trigger refuses a period payroll has already paid.

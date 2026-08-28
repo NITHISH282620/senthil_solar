@@ -13,39 +13,72 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Check } from "lucide-react";
+import { Loader2, Check, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/format";
 import { getCrewForDate, markCrewAttendance, type CrewMember } from "@/actions/attendance";
 import type { SiteOption } from "@/actions/sites";
 
 /**
  * The sheet a supervisor fills in standing on site.
  *
- * Deliberately one tap per person and one submit for the crew: markCrewAttendance
- * existed as an action with nothing to call it, and before that there was no way
- * for a supervisor to record anyone's day but their own — so attendance stayed on
- * paper and payroll had nothing to read.
+ * A quick tap sets Present, Half day or Absent. There is no "Leave" tap
+ * anymore — leave is a paid absence the owner grants, not something a
+ * supervisor can hand out from a phone; it comes through the leave-request
+ * workflow instead. Present and Half day both ask for the time actually
+ * worked, because "present" alone told the owner nothing he could pay
+ * against — a normal 9-to-5 and someone held on site until 9pm looked
+ * identical. The hours worked, and any overtime, are computed from that
+ * time and shown back immediately as "5hr 45min" rather than a decimal.
  */
-const CHOICES = [
+const STATUS_CHOICES = [
   { value: "present", label: "P", title: "Present", tone: "bg-emerald-600 text-white" },
   { value: "half_day", label: "½", title: "Half day", tone: "bg-amber-500 text-white" },
   { value: "absent", label: "A", title: "Absent", tone: "bg-red-600 text-white" },
-  { value: "leave", label: "L", title: "Leave", tone: "bg-blue-600 text-white" },
-];
+] as const;
+
+type StatusValue = (typeof STATUS_CHOICES)[number]["value"];
+
+const NEEDS_TIME = new Set<StatusValue>(["present", "half_day"]);
+
+/** Minutes since midnight, for diffing two "HH:mm" strings. */
+function toMinutes(hhmm: string): number | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function workedHoursBetween(start: string, end: string): number | null {
+  const a = toMinutes(start);
+  const b = toMinutes(end);
+  if (a === null || b === null || b <= a) return null;
+  return (b - a) / 60;
+}
+
+interface TimeRange {
+  start: string;
+  end: string;
+}
 
 export function CrewAttendanceSheet({
   sites,
   today,
+  defaultShiftStart = "09:00",
+  defaultShiftEnd = "17:00",
 }: {
   sites: SiteOption[];
   today: string;
+  /** The company's normal shift, used to prefill the time pickers. */
+  defaultShiftStart?: string;
+  defaultShiftEnd?: string;
 }) {
   const router = useRouter();
   const [siteId, setSiteId] = useState<string>(sites[0]?.id ?? "");
   const [date, setDate] = useState(today);
   const [crew, setCrew] = useState<CrewMember[] | null>(null);
-  const [marks, setMarks] = useState<Record<string, string>>({});
+  const [statuses, setStatuses] = useState<Record<string, StatusValue>>({});
+  const [times, setTimes] = useState<Record<string, TimeRange>>({});
   const [loading, startLoading] = useTransition();
   const [saving, setSaving] = useState(false);
 
@@ -60,21 +93,73 @@ export function CrewAttendanceSheet({
       setCrew(data ?? []);
       // Seed from what is already recorded, so re-opening the sheet shows the
       // day as it stands rather than as a blank form.
-      setMarks(
+      setStatuses(
         Object.fromEntries(
           (data ?? [])
-            .filter((m) => m.status)
-            .map((m) => [m.employee_id, m.status as string])
+            .filter((m): m is CrewMember & { status: StatusValue } =>
+              STATUS_CHOICES.some((c) => c.value === m.status)
+            )
+            .map((m) => [m.employee_id, m.status])
+        )
+      );
+      setTimes(
+        Object.fromEntries(
+          (data ?? []).map((m) => [
+            m.employee_id,
+            {
+              start: m.check_in_time ?? defaultShiftStart,
+              end: m.check_out_time ?? defaultShiftEnd,
+            },
+          ])
         )
       );
     });
   }
 
-  async function handleSave() {
-    const entries = Object.entries(marks).map(([employee_id, status]) => ({
-      employee_id,
-      status,
+  function setStatus(employeeId: string, status: StatusValue) {
+    setStatuses((s) => ({ ...s, [employeeId]: status }));
+    // Give every newly-marked person the normal shift to start from; the
+    // supervisor only has to change it for someone who worked different hours.
+    setTimes((t) =>
+      t[employeeId] ? t : { ...t, [employeeId]: { start: defaultShiftStart, end: defaultShiftEnd } }
+    );
+  }
+
+  function setTime(employeeId: string, field: "start" | "end", value: string) {
+    setTimes((t) => ({
+      ...t,
+      [employeeId]: { ...(t[employeeId] ?? { start: defaultShiftStart, end: defaultShiftEnd }), [field]: value },
     }));
+  }
+
+  async function handleSave() {
+    const entries: {
+      employee_id: string;
+      status: string;
+      check_in_time?: string;
+      check_out_time?: string;
+    }[] = [];
+
+    for (const [employeeId, status] of Object.entries(statuses)) {
+      if (NEEDS_TIME.has(status)) {
+        const range = times[employeeId];
+        if (!range || workedHoursBetween(range.start, range.end) === null) {
+          const person = crew?.find((c) => c.employee_id === employeeId);
+          toast.error(
+            `${person?.full_name ?? "Someone"}: check-out must be after check-in.`
+          );
+          return;
+        }
+        entries.push({
+          employee_id: employeeId,
+          status,
+          check_in_time: range.start,
+          check_out_time: range.end,
+        });
+      } else {
+        entries.push({ employee_id: employeeId, status });
+      }
+    }
 
     if (entries.length === 0) {
       toast.error("Mark at least one person.");
@@ -95,7 +180,7 @@ export function CrewAttendanceSheet({
 
   if (sites.length === 0) return null;
 
-  const markedCount = Object.keys(marks).length;
+  const markedCount = Object.keys(statuses).length;
 
   return (
     <Card>
@@ -160,43 +245,85 @@ export function CrewAttendanceSheet({
         {crew !== null && crew.length > 0 && (
           <>
             <div className="divide-y rounded-md border">
-              {crew.map((member) => (
-                <div
-                  key={member.employee_id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{member.full_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {member.employee_code} · {member.role_on_site}
-                    </p>
-                  </div>
+              {crew.map((member) => {
+                const status = statuses[member.employee_id];
+                const range = times[member.employee_id];
+                const showTime = status && NEEDS_TIME.has(status);
+                const duration = range ? workedHoursBetween(range.start, range.end) : null;
 
-                  <div className="flex gap-1">
-                    {CHOICES.map((choice) => {
-                      const active = marks[member.employee_id] === choice.value;
-                      return (
-                        <button
-                          key={choice.value}
-                          type="button"
-                          title={choice.title}
-                          aria-label={`${member.full_name}: ${choice.title}`}
-                          aria-pressed={active}
-                          onClick={() =>
-                            setMarks((m) => ({ ...m, [member.employee_id]: choice.value }))
-                          }
+                return (
+                  <div key={member.employee_id} className="p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{member.full_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {member.employee_code} · {member.role_on_site}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-1">
+                        {STATUS_CHOICES.map((choice) => {
+                          const active = status === choice.value;
+                          return (
+                            <button
+                              key={choice.value}
+                              type="button"
+                              title={choice.title}
+                              aria-label={`${member.full_name}: ${choice.title}`}
+                              aria-pressed={active}
+                              onClick={() => setStatus(member.employee_id, choice.value)}
+                              className={cn(
+                                "h-9 w-9 rounded-md border text-sm font-semibold transition-colors",
+                                active ? choice.tone : "hover:bg-muted"
+                              )}
+                            >
+                              {choice.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {showTime && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-muted/40 p-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <Label htmlFor={`start-${member.employee_id}`} className="text-xs text-muted-foreground">
+                            From
+                          </Label>
+                          <Input
+                            id={`start-${member.employee_id}`}
+                            type="time"
+                            value={range?.start ?? defaultShiftStart}
+                            onChange={(e) => setTime(member.employee_id, "start", e.target.value)}
+                            className="h-8 w-28"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Label htmlFor={`end-${member.employee_id}`} className="text-xs text-muted-foreground">
+                            To
+                          </Label>
+                          <Input
+                            id={`end-${member.employee_id}`}
+                            type="time"
+                            value={range?.end ?? defaultShiftEnd}
+                            onChange={(e) => setTime(member.employee_id, "end", e.target.value)}
+                            className="h-8 w-28"
+                          />
+                        </div>
+                        <div
                           className={cn(
-                            "h-9 w-9 rounded-md border text-sm font-semibold transition-colors",
-                            active ? choice.tone : "hover:bg-muted"
+                            "ml-auto flex items-center gap-1 text-sm font-medium",
+                            duration === null ? "text-destructive" : "text-foreground"
                           )}
                         >
-                          {choice.label}
-                        </button>
-                      );
-                    })}
+                          <Clock className="h-3.5 w-3.5" />
+                          {duration === null ? "Check-out must be after check-in" : formatDuration(duration)}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex items-center justify-between">
