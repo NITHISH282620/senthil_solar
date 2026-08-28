@@ -122,6 +122,11 @@ export default async function QuotationDetailPage({ params }: PageProps) {
               <h2 className="text-3xl font-bold tracking-tight mb-2 text-primary">
                 ₹{(quotation.total_amount ?? 0).toLocaleString()}
               </h2>
+              {quotation.valid_from && (
+                <p className="text-sm text-muted-foreground">
+                  Valid from: {formatDate(quotation.valid_from)}
+                </p>
+              )}
               {quotation.valid_until && (
                 <p className="text-sm text-muted-foreground">
                   Valid until: {formatDate(quotation.valid_until)}

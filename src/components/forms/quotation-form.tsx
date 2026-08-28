@@ -53,6 +53,21 @@ const emptyItem: LineItem = {
   line_total: 0,
 };
 
+/**
+ * Every field here is now React state read directly at submit time — none of
+ * it goes through FormData off the DOM.
+ *
+ * The previous version mixed the two: `items` was controlled React state,
+ * but title/description/capacity/dates/panel/inverter were plain uncontrolled
+ * inputs read via `new FormData(form)` when `<form action={handleSubmit}>`
+ * fired. That combination submitted a form whose `items` state said one thing
+ * and whose live DOM occasionally said another — reported as "at least one
+ * line item is required" even after typing one, because the check ran against
+ * whatever `items` closure the action still held rather than the field the
+ * user was looking at. Reading every field from the same state that renders
+ * it removes the two things that made that possible: no native FormData
+ * snapshot, and no `action` prop for React to manage a reset around.
+ */
 export function QuotationForm({ quotation, companies }: QuotationFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -67,6 +82,18 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
       line_total: i.line_total ?? 0,
     })) ?? [{ ...emptyItem }]
   );
+
+  const [companyId, setCompanyId] = useState(quotation?.company_id ?? "");
+  const [title, setTitle] = useState(quotation?.title ?? "");
+  const [description, setDescription] = useState(quotation?.description ?? "");
+  const [capacityKw, setCapacityKw] = useState(
+    quotation?.capacity_kw != null ? String(quotation.capacity_kw) : ""
+  );
+  const [validFrom, setValidFrom] = useState(quotation?.valid_from ?? "");
+  const [validUntil, setValidUntil] = useState(quotation?.valid_until ?? "");
+  const [panelType, setPanelType] = useState(quotation?.panel_type ?? "");
+  const [inverterType, setInverterType] = useState(quotation?.inverter_type ?? "");
+  const [notes, setNotes] = useState(quotation?.notes ?? "");
 
   const [gstPercent, setGstPercent] = useState(quotation?.gst_percent ?? 18);
   const [discountAmount, setDiscountAmount] = useState(
@@ -106,33 +133,47 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
     setItems(updated);
   }
 
-  async function handleSubmit(formData: FormData) {
-    setLoading(true);
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    if (!companyId) {
+      toast.error("Choose the client this quotation is for.");
+      return;
+    }
+    if (!title.trim()) {
+      toast.error("Give the quotation a title.");
+      return;
+    }
 
     // Validate items
     const validItems = items.filter((item) => item.description.trim());
     if (validItems.length === 0) {
       toast.error("At least one line item is required.");
-      setLoading(false);
       return;
     }
 
+    if (validFrom && validUntil && validUntil < validFrom) {
+      toast.error("Valid until cannot be before valid from.");
+      return;
+    }
+
+    setLoading(true);
+
     const quotationData: Record<string, unknown> = {
-      company_id: formData.get("company_id") as string,
-      title: formData.get("title") as string,
-      description: (formData.get("description") as string) || null,
-      capacity_kw: formData.get("capacity_kw")
-        ? Number(formData.get("capacity_kw"))
-        : null,
-      panel_type: (formData.get("panel_type") as string) || null,
-      inverter_type: (formData.get("inverter_type") as string) || null,
+      company_id: companyId,
+      title: title.trim(),
+      description: description.trim() || null,
+      capacity_kw: capacityKw ? Number(capacityKw) : null,
+      panel_type: panelType.trim() || null,
+      inverter_type: inverterType.trim() || null,
       subtotal,
       gst_percent: gstPercent,
       gst_amount: gstAmount,
       discount_amount: discountAmount,
       total_amount: totalAmount,
-      valid_until: (formData.get("valid_until") as string) || null,
-      notes: (formData.get("notes") as string) || null,
+      valid_from: validFrom || null,
+      valid_until: validUntil || null,
+      notes: notes.trim() || null,
     };
 
     const itemsPayload = validItems.map((item, index) => ({
@@ -163,7 +204,7 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-6 max-w-4xl">
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
       {/* Basic Info */}
       <Card>
         <CardHeader>
@@ -173,9 +214,8 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
           <div className="space-y-2">
             <Label htmlFor="company_id">Company *</Label>
             <Select
-              name="company_id"
-              defaultValue={quotation?.company_id ?? ""}
-              required
+              value={companyId}
+              onValueChange={(v) => setCompanyId(v ?? "")}
               disabled={loading}
             >
               <SelectTrigger id="company_id">
@@ -195,9 +235,8 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
             <Label htmlFor="title">Title *</Label>
             <Input
               id="title"
-              name="title"
-              defaultValue={quotation?.title ?? ""}
-              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., 5kW Rooftop Solar System"
               disabled={loading}
             />
@@ -207,8 +246,8 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              name="description"
-              defaultValue={quotation?.description ?? ""}
+              value={description ?? ""}
+              onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief description of the quotation"
               rows={2}
               disabled={loading}
@@ -219,11 +258,28 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
             <Label htmlFor="capacity_kw">System Capacity (kW)</Label>
             <Input
               id="capacity_kw"
-              name="capacity_kw"
               type="number"
               step="0.001"
-              defaultValue={quotation?.capacity_kw ?? ""}
+              value={capacityKw}
+              onChange={(e) => setCapacityKw(e.target.value)}
               placeholder="e.g., 5.00"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Validity is a window, not just an expiry — a price can be locked
+              in only from a given start date (a seasonal rate, a bulk-material
+              price held for a window), so an expiry date alone cannot say
+              that. Valid From defaults to nothing, meaning effective
+              immediately, which matches the old single-date behaviour. */}
+          <div className="space-y-2">
+            <Label htmlFor="valid_from">Valid From</Label>
+            <Input
+              id="valid_from"
+              type="date"
+              value={validFrom ?? ""}
+              max={validUntil || undefined}
+              onChange={(e) => setValidFrom(e.target.value)}
               disabled={loading}
             />
           </div>
@@ -232,9 +288,10 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
             <Label htmlFor="valid_until">Valid Until</Label>
             <Input
               id="valid_until"
-              name="valid_until"
               type="date"
-              defaultValue={quotation?.valid_until ?? ""}
+              value={validUntil ?? ""}
+              min={validFrom || undefined}
+              onChange={(e) => setValidUntil(e.target.value)}
               disabled={loading}
             />
           </div>
@@ -243,8 +300,8 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
             <Label htmlFor="panel_type">Panel Type</Label>
             <Input
               id="panel_type"
-              name="panel_type"
-              defaultValue={quotation?.panel_type ?? ""}
+              value={panelType ?? ""}
+              onChange={(e) => setPanelType(e.target.value)}
               placeholder="e.g., Mono PERC 545W"
               disabled={loading}
             />
@@ -254,8 +311,8 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
             <Label htmlFor="inverter_type">Inverter Type</Label>
             <Input
               id="inverter_type"
-              name="inverter_type"
-              defaultValue={quotation?.inverter_type ?? ""}
+              value={inverterType ?? ""}
+              onChange={(e) => setInverterType(e.target.value)}
               placeholder="e.g., Growatt 5kW"
               disabled={loading}
             />
@@ -418,8 +475,8 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
         </CardHeader>
         <CardContent>
           <Textarea
-            name="notes"
-            defaultValue={quotation?.notes ?? ""}
+            value={notes ?? ""}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder="Terms, conditions, or internal notes"
             rows={3}
             disabled={loading}

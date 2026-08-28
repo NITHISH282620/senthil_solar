@@ -436,12 +436,20 @@ export const quotationDataSchema = z.object({
   warranty_terms: optionalText(2000),
   payment_terms: optionalText(2000),
   terms: optionalText(4000),
+  valid_from: optionalDate(),
   valid_until: optionalDate(),
   notes: optionalText(2000),
   status: z
     .enum(["draft", "sent", "approved", "rejected", "expired", "converted"])
     .default("draft"),
-});
+})
+  // Mirrors the database's own quotation_validity_window_sane constraint, so
+  // the mistake is caught here with a field-level message rather than as a
+  // raw constraint-violation error from Postgres.
+  .refine(
+    (v) => !v.valid_from || !v.valid_until || v.valid_until >= v.valid_from,
+    { message: "Valid until cannot be before valid from", path: ["valid_until"] }
+  );
 
 export const quotationStatusSchema = z.object({
   status: z.enum([

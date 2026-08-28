@@ -82,6 +82,14 @@ export default async function PrintQuotationPage({ params }: PageProps) {
                 {formatDate(quotation.created_at)}
               </span>
             </div>
+            {quotation.valid_from && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Valid From:</span>
+                <span className="font-medium text-gray-900">
+                  {formatDate(quotation.valid_from)}
+                </span>
+              </div>
+            )}
             {quotation.valid_until && (
               <div className="flex justify-between">
                 <span className="text-gray-500">Valid Until:</span>

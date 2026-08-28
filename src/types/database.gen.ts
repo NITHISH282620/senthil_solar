@@ -2915,6 +2915,7 @@ export type Database = {
           title: string
           total_amount: number | null
           updated_at: string
+          valid_from: string | null
           valid_until: string | null
           version: number
           warranty_terms: string | null
@@ -2943,6 +2944,7 @@ export type Database = {
           title: string
           total_amount?: number | null
           updated_at?: string
+          valid_from?: string | null
           valid_until?: string | null
           version?: number
           warranty_terms?: string | null
@@ -2971,6 +2973,7 @@ export type Database = {
           title?: string
           total_amount?: number | null
           updated_at?: string
+          valid_from?: string | null
           valid_until?: string | null
           version?: number
           warranty_terms?: string | null
