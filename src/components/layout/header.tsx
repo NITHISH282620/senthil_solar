@@ -11,40 +11,46 @@ import {
 } from "@/components/ui/sheet";
 import { Sidebar } from "./sidebar";
 import type { Profile } from "@/types/database";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import type { TranslationKey } from "@/lib/i18n";
 
-// Map routes to readable page titles
-const routeTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/employees": "Employees",
-  "/attendance": "Attendance",
-  "/companies": "Client Companies",
-  "/contracts": "Contracts",
-  "/sites": "Sites",
-  "/cash": "Cash Book",
-  "/payroll": "Payroll",
-  "/quotations": "Quotations",
-  "/billing": "Billing",
-  "/expenses": "Expenses",
-  "/documents": "Documents",
-  "/reports": "Reports",
-  "/settings": "Settings",
+// Map routes to their nav translation key (mirrors sidebar.tsx's navItems).
+// Client Companies uses nav.clients like the sidebar link it corresponds to.
+const routeTitleKeys: Record<string, TranslationKey> = {
+  "/dashboard": "nav.dashboard",
+  "/employees": "nav.employees",
+  "/attendance": "nav.attendance",
+  "/companies": "nav.clients",
+  "/contracts": "nav.contracts",
+  "/sites": "nav.sites",
+  "/cash": "nav.cashBook",
+  "/payroll": "nav.payroll",
+  "/quotations": "nav.quotations",
+  "/billing": "nav.billing",
+  "/settings": "nav.settings",
 };
 
-function getPageTitle(pathname: string): string {
+function getPageTitle(
+  pathname: string,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string
+): string {
   // Direct match
-  if (routeTitles[pathname]) return routeTitles[pathname];
+  if (routeTitleKeys[pathname]) return t(routeTitleKeys[pathname]);
 
   // Check if it's a nested route
-  for (const [route, title] of Object.entries(routeTitles)) {
+  for (const [route, key] of Object.entries(routeTitleKeys)) {
     if (pathname.startsWith(route)) {
+      const title = t(key);
       // Handle /employees/new, /employees/[id]/edit, etc.
-      if (pathname.endsWith("/new")) return `New ${title.replace(/s$/, "")}`;
-      if (pathname.endsWith("/edit")) return `Edit ${title.replace(/s$/, "")}`;
-      return `${title} Detail`;
+      if (pathname.endsWith("/new"))
+        return t("common.newItem", { item: title.replace(/s$/, "") });
+      if (pathname.endsWith("/edit"))
+        return t("common.editItem", { item: title.replace(/s$/, "") });
+      return t("common.itemDetail", { item: title });
     }
   }
 
-  return "SolarOps";
+  return t("common.appName");
 }
 
 interface HeaderProps {
@@ -53,7 +59,8 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
   const pathname = usePathname();
-  const pageTitle = getPageTitle(pathname);
+  const { t } = useLocale();
+  const pageTitle = getPageTitle(pathname, t);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur-sm px-4 lg:px-6">
@@ -65,10 +72,10 @@ export function Header({ user }: HeaderProps) {
           }
         >
           <Menu size={20} />
-          <span className="sr-only">Toggle menu</span>
+          <span className="sr-only">{t("nav.toggleMenu")}</span>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
-          <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+          <SheetTitle className="sr-only">{t("nav.navigationMenu")}</SheetTitle>
           <Sidebar user={user} />
         </SheetContent>
       </Sheet>

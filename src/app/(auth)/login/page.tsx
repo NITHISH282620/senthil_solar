@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Eye, EyeOff } from "lucide-react";
+import { useLocale } from "@/lib/i18n/locale-provider";
 
 export default function LoginPage() {
+  const { t } = useLocale();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -20,7 +22,15 @@ export default function LoginPage() {
     const result = await loginAction(formData);
 
     if (result?.error) {
-      setError(result.error);
+      // Supabase's own auth error text ("Invalid login credentials") isn't
+      // ours to translate generically — only the specific message we know
+      // maps to a friendly, translated one. Anything else surfaces as-is
+      // rather than risk mistranslating an error we don't recognise.
+      setError(
+        result.error === "Invalid login credentials"
+          ? t("auth.invalidCredentials")
+          : result.error
+      );
       setLoading(false);
     }
     // On success, loginAction redirects — no need to handle here
@@ -57,10 +67,8 @@ export default function LoginPage() {
       </div>
 
       <div className="space-y-2 text-center lg:text-left">
-        <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-        <p className="text-muted-foreground">
-          Sign in to your account to continue
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("auth.welcomeBack")}</h1>
+        <p className="text-muted-foreground">{t("auth.signInSubtitle")}</p>
       </div>
 
       <form action={handleSubmit} className="space-y-5">
@@ -71,7 +79,7 @@ export default function LoginPage() {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("auth.email")}</Label>
           <Input
             id="email"
             name="email"
@@ -85,12 +93,12 @@ export default function LoginPage() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t("auth.password")}</Label>
             <Link
               href="/forgot-password"
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              Forgot password?
+              {t("auth.forgotPassword")}
             </Link>
           </div>
           <div className="relative">
@@ -98,7 +106,7 @@ export default function LoginPage() {
               id="password"
               name="password"
               type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
+              placeholder={t("auth.password")}
               required
               autoComplete="current-password"
               disabled={loading}
@@ -119,16 +127,16 @@ export default function LoginPage() {
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing in...
+              {t("auth.signingIn")}
             </>
           ) : (
-            "Sign in"
+            t("auth.signIn")
           )}
         </Button>
       </form>
 
       <p className="text-center text-xs text-muted-foreground">
-        Contact your administrator if you need an account.
+        {t("auth.noAccountHint")}
       </p>
     </div>
   );

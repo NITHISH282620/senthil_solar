@@ -7,7 +7,17 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /*
+   * Noto Sans Tamil is an explicit fallback, not a swap. Geist has no Tamil
+   * glyphs, so Tamil characters were falling through to whatever generic
+   * font the device shipped — inconsistent across Android versions and
+   * browsers. The browser already resolves font-family per glyph across a
+   * fallback list, so English text keeps rendering in Geist and Tamil text
+   * renders in Noto Sans Tamil, in the same sentence if need be, with no
+   * per-locale className switch required anywhere in the app.
+   */
+  --font-sans: var(--font-geist-sans), var(--font-noto-tamil), ui-sans-serif,
+    system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);

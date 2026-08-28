@@ -31,6 +31,9 @@ import { getEmployees } from "@/actions/employees";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
+import { getServerDictionary } from "@/lib/i18n/server";
+import { t } from "@/lib/i18n";
+import type { Dictionary } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -43,10 +46,11 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
+  const dict = await getServerDictionary();
   const seesMoney = MONEY_ROLES.includes(user.role);
 
   if (!seesMoney) {
-    return <FieldDashboard name={user.full_name} />;
+    return <FieldDashboard name={user.full_name} dict={dict} />;
   }
 
   const [
@@ -76,8 +80,8 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Good morning, ${user.full_name.split(" ")[0]}`}
-        description="Where the work is, and where the money went."
+        title={t(dict, "dashboard.greeting", { name: user.full_name.split(" ")[0] })}
+        description={t(dict, "dashboard.subtitle")}
       >
         <QuickMoneyLauncher
           bankAccounts={bankAccounts ?? []}
@@ -93,47 +97,51 @@ export default async function DashboardPage() {
       {/* Money and work, today */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Tile
-          label="Cash in hand"
+          label={t(dict, "dashboard.cashInHand")}
           value={formatCurrency(cashInHand)}
           icon={<Wallet className="h-4 w-4" />}
           tone={cashInHand < 0 ? "bad" : "neutral"}
           href="/cash"
         />
         <Tile
-          label="In today"
+          label={t(dict, "dashboard.inToday")}
           value={formatCurrency(Number(today?.cash_in_today ?? 0))}
-          hint={`${formatCurrency(Number(today?.cash_in_yesterday ?? 0))} yesterday`}
+          hint={t(dict, "dashboard.yesterdayAmount", {
+            amount: formatCurrency(Number(today?.cash_in_yesterday ?? 0)),
+          })}
           icon={<ArrowDownLeft className="h-4 w-4" />}
           tone="good"
           href="/cash?direction=in"
         />
         <Tile
-          label="Out today"
+          label={t(dict, "dashboard.outToday")}
           value={formatCurrency(Number(today?.cash_out_today ?? 0))}
-          hint={`${formatCurrency(Number(today?.cash_out_yesterday ?? 0))} yesterday`}
+          hint={t(dict, "dashboard.yesterdayAmount", {
+            amount: formatCurrency(Number(today?.cash_out_yesterday ?? 0)),
+          })}
           icon={<ArrowUpRight className="h-4 w-4" />}
           tone="bad"
           href="/cash?direction=out"
         />
         <Tile
-          label="Clients owe"
+          label={t(dict, "dashboard.clientsOwe")}
           value={formatCurrency(Number(today?.total_outstanding ?? 0))}
           icon={<Receipt className="h-4 w-4" />}
           href="/billing"
         />
         <Tile
-          label="Active sites"
+          label={t(dict, "dashboard.activeSites")}
           value={String(today?.active_sites ?? 0)}
           icon={<HardHat className="h-4 w-4" />}
           href="/sites"
         />
         <Tile
-          label="Workers present"
+          label={t(dict, "dashboard.workersPresent")}
           value={String(today?.workers_present_today ?? 0)}
           hint={
             Number(today?.workers_absent_today ?? 0) > 0
-              ? `${today?.workers_absent_today} absent`
-              : "nobody absent"
+              ? t(dict, "dashboard.absentCount", { count: today?.workers_absent_today ?? 0 })
+              : t(dict, "dashboard.nobodyAbsent")
           }
           tone={Number(today?.workers_absent_today ?? 0) > 0 ? "bad" : "neutral"}
           icon={<Users className="h-4 w-4" />}
@@ -146,17 +154,17 @@ export default async function DashboardPage() {
           Rs 50,000 stayed invisible. */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Tile
-          label="You owe your people"
+          label={t(dict, "dashboard.youOwePeople")}
           value={formatCurrency(Number(today?.owed_to_employees ?? 0))}
-          hint="Approved claims and finalised wages not yet paid out"
+          hint={t(dict, "dashboard.youOwePeopleHint")}
           icon={<HandCoins className="h-4 w-4" />}
           tone={Number(today?.owed_to_employees ?? 0) > 0 ? "bad" : "neutral"}
           href="/employees"
         />
         <Tile
-          label="Client credit you hold"
+          label={t(dict, "dashboard.clientCreditHeld")}
           value={formatCurrency(Number(today?.client_credit_held ?? 0))}
-          hint="Money received that no invoice has claimed yet"
+          hint={t(dict, "dashboard.clientCreditHeldHint")}
           icon={<Coins className="h-4 w-4" />}
           href="/billing"
         />
@@ -165,41 +173,41 @@ export default async function DashboardPage() {
       {/* Needs attention */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Needs attention</CardTitle>
+          <CardTitle className="text-base">{t(dict, "dashboard.needsAttention")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Attention
-            label="Overdue invoices"
+            label={t(dict, "dashboard.overdueInvoices")}
             count={Number(today?.overdue_invoices ?? 0)}
             icon={<AlertTriangle className="h-4 w-4" />}
             href="/billing?status=overdue"
           />
           <Attention
-            label="Sites past deadline"
+            label={t(dict, "dashboard.sitesPastDeadline")}
             count={Number(today?.delayed_sites ?? 0)}
             icon={<Clock className="h-4 w-4" />}
             href="/sites"
           />
           <Attention
-            label="Sites missing attendance"
+            label={t(dict, "dashboard.sitesMissingAttendance")}
             count={Number(today?.sites_missing_attendance ?? 0)}
             icon={<Users className="h-4 w-4" />}
             href="/attendance"
           />
           <Attention
-            label="Expenses to approve"
+            label={t(dict, "dashboard.expensesToApprove")}
             count={Number(today?.pending_expense_approvals ?? 0)}
             icon={<Receipt className="h-4 w-4" />}
             href="/expenses?status=pending"
           />
           <Attention
-            label="Open quotations"
+            label={t(dict, "dashboard.openQuotations")}
             count={attention?.pendingQuotations ?? 0}
             icon={<FileText className="h-4 w-4" />}
             href="/quotations"
           />
           <Attention
-            label="Advances outstanding"
+            label={t(dict, "dashboard.advancesOutstanding")}
             count={attention?.outstandingAdvances ?? 0}
             icon={<Wallet className="h-4 w-4" />}
             href="/employees"
@@ -215,13 +223,13 @@ export default async function DashboardPage() {
               {losingSites.length > 0 && (
                 <TrendingDown className="h-4 w-4 text-red-600" />
               )}
-              Site profitability
+              {t(dict, "dashboard.siteProfitability")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {(siteProfit ?? []).length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No active sites yet.
+                {t(dict, "dashboard.noActiveSites")}
               </p>
             ) : (
               (siteProfit ?? []).map((s) => (
@@ -235,8 +243,10 @@ export default async function DashboardPage() {
                       {s.site_name}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {formatCurrency(Number(s.total_cost))} spent of{" "}
-                      {formatCurrency(Number(s.revenue_allocated))}
+                      {t(dict, "dashboard.spentOf", {
+                        spent: formatCurrency(Number(s.total_cost)),
+                        revenue: formatCurrency(Number(s.revenue_allocated)),
+                      })}
                     </div>
                   </div>
                   <div className="text-right">
@@ -252,7 +262,9 @@ export default async function DashboardPage() {
                     </div>
                     {s.margin_percent !== null && (
                       <div className="text-xs text-muted-foreground">
-                        {Number(s.margin_percent)}% margin
+                        {t(dict, "dashboard.marginPercent", {
+                          percent: Number(s.margin_percent),
+                        })}
                       </div>
                     )}
                   </div>
@@ -265,12 +277,12 @@ export default async function DashboardPage() {
         {/* Receivables */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Money owed to you</CardTitle>
+            <CardTitle className="text-base">{t(dict, "dashboard.moneyOwedToYou")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {(receivables ?? []).length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Nothing outstanding.
+                {t(dict, "dashboard.nothingOutstanding")}
               </p>
             ) : (
               (receivables ?? []).map((r) => (
@@ -293,7 +305,7 @@ export default async function DashboardPage() {
                     </div>
                     {Number(r.days_overdue) > 0 && (
                       <div className="text-xs text-red-600">
-                        {r.days_overdue} days overdue
+                        {t(dict, "dashboard.daysOverdue", { days: r.days_overdue })}
                       </div>
                     )}
                   </div>
@@ -392,21 +404,21 @@ function Attention({
  * The access model is enforced in RLS; this only avoids rendering tiles that
  * would come back empty for them anyway.
  */
-function FieldDashboard({ name }: { name: string }) {
+function FieldDashboard({ name, dict }: { name: string; dict: Dictionary }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Hello, ${name.split(" ")[0]}`}
-        description="Your work today."
+        title={t(dict, "dashboard.fieldGreeting", { name: name.split(" ")[0] })}
+        description={t(dict, "dashboard.fieldSubtitle")}
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <Link href="/attendance/my-attendance">
           <Card className="transition-colors hover:border-primary/50">
             <CardContent className="p-6">
               <Users className="mb-2 h-5 w-5 text-muted-foreground" />
-              <div className="font-medium">My attendance</div>
+              <div className="font-medium">{t(dict, "dashboard.myAttendanceTile")}</div>
               <p className="text-sm text-muted-foreground">
-                Check in, check out, and see this month.
+                {t(dict, "dashboard.myAttendanceHint")}
               </p>
             </CardContent>
           </Card>
@@ -415,9 +427,9 @@ function FieldDashboard({ name }: { name: string }) {
           <Card className="transition-colors hover:border-primary/50">
             <CardContent className="p-6">
               <Receipt className="mb-2 h-5 w-5 text-muted-foreground" />
-              <div className="font-medium">Record an expense</div>
+              <div className="font-medium">{t(dict, "dashboard.recordExpenseTile")}</div>
               <p className="text-sm text-muted-foreground">
-                Submit what you spent on site for approval.
+                {t(dict, "dashboard.recordExpenseHint")}
               </p>
             </CardContent>
           </Card>

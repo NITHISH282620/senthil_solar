@@ -32,6 +32,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { logoutAction } from "@/actions/auth";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import type { TranslationKey } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/shared/language-toggle";
 
 interface SidebarProps {
   user: Profile;
@@ -40,68 +43,68 @@ interface SidebarProps {
 }
 
 interface NavItem {
-  title: string;
+  titleKey: TranslationKey;
   href: string;
   icon: React.ElementType;
   roles?: string[]; // If empty, all roles can see
 }
 
 const navItems: NavItem[] = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   {
-    title: "Clients",
+    titleKey: "nav.clients",
     href: "/companies",
     icon: Building2,
     roles: ["owner", "manager"],
   },
   {
-    title: "Quotations",
+    titleKey: "nav.quotations",
     href: "/quotations",
     icon: FileText,
     roles: ["owner", "manager"],
   },
   {
-    title: "Contracts",
+    titleKey: "nav.contracts",
     href: "/contracts",
     icon: Briefcase,
     // Contracts are money: auth_can_see_money() hides every row from a field
     // role, so linking them there only ever produced an empty page.
     roles: ["owner", "manager", "accountant"],
   },
-  { title: "Sites", href: "/sites", icon: HardHat },
+  { titleKey: "nav.sites", href: "/sites", icon: HardHat },
   {
-    title: "Cash Book",
+    titleKey: "nav.cashBook",
     href: "/cash",
     icon: Wallet,
     roles: ["owner", "manager", "accountant"],
   },
   {
-    title: "Attendance",
+    titleKey: "nav.attendance",
     href: "/attendance",
     icon: CalendarCheck,
     roles: ["owner", "manager", "supervisor", "engineer"],
   },
   {
-    title: "My Attendance",
+    titleKey: "nav.myAttendance",
     href: "/attendance/my-attendance",
     icon: CalendarCheck,
     roles: ["worker", "store_manager", "accountant"],
   },
-  { title: "Expenses", href: "/expenses", icon: Receipt },
+  { titleKey: "nav.expenses", href: "/expenses", icon: Receipt },
   {
-    title: "Billing",
+    titleKey: "nav.billing",
     href: "/billing",
     icon: IndianRupee,
     roles: ["owner", "manager"],
   },
   {
-    title: "Employees",
+    titleKey: "nav.employees",
     href: "/employees",
     icon: Users,
     roles: ["owner", "manager"],
   },
   {
-    title: "Payroll",
+    titleKey: "nav.payroll",
     href: "/payroll",
     icon: Banknote,
     roles: ["owner", "manager", "accountant"],
@@ -109,12 +112,13 @@ const navItems: NavItem[] = [
 ];
 
 const bottomItems: NavItem[] = [
-  { title: "Audit Trail", href: "/audit", icon: ShieldCheck, roles: ["owner"] },
-  { title: "Settings", href: "/settings", icon: Settings, roles: ["owner"] },
+  { titleKey: "nav.auditTrail", href: "/audit", icon: ShieldCheck, roles: ["owner"] },
+  { titleKey: "nav.settings", href: "/settings", icon: Settings, roles: ["owner"] },
 ];
 
 export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
+  const { t } = useLocale();
 
   const filteredNavItems = navItems.filter(
     (item) => !item.roles || item.roles.includes(user.role)
@@ -180,7 +184,7 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
                 )}
               >
                 <Icon size={18} className="shrink-0" />
-                {!collapsed && <span>{item.title}</span>}
+                {!collapsed && <span>{t(item.titleKey)}</span>}
               </Link>
             );
 
@@ -188,7 +192,7 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
               return (
                 <Tooltip key={item.href}>
                   <TooltipTrigger render={<span />}>{linkContent}</TooltipTrigger>
-                  <TooltipContent side="right">{item.title}</TooltipContent>
+                  <TooltipContent side="right">{t(item.titleKey)}</TooltipContent>
                 </Tooltip>
               );
             }
@@ -215,7 +219,7 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
               )}
             >
               <Icon size={18} className="shrink-0" />
-              {!collapsed && <span>{item.title}</span>}
+              {!collapsed && <span>{t(item.titleKey)}</span>}
             </Link>
           );
 
@@ -223,7 +227,7 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
             return (
               <Tooltip key={item.href}>
                 <TooltipTrigger render={<span />}>{linkContent}</TooltipTrigger>
-                <TooltipContent side="right">{item.title}</TooltipContent>
+                <TooltipContent side="right">{t(item.titleKey)}</TooltipContent>
               </Tooltip>
             );
           }
@@ -232,6 +236,11 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
         })}
 
         <Separator className="my-2" />
+
+        {/* Language toggle */}
+        <div className="flex justify-center pb-1">
+          <LanguageToggle compact={collapsed} />
+        </div>
 
         {/* User profile */}
         <div
@@ -249,7 +258,7 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.full_name}</p>
               <p className="text-xs text-sidebar-foreground/60 capitalize">
-                {user.role}
+                {t(`roles.${user.role}` as TranslationKey)}
               </p>
             </div>
           )}
@@ -266,7 +275,7 @@ export function Sidebar({ user, collapsed = false, onToggleCollapse }: SidebarPr
                     <LogOut size={14} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Sign out</TooltipContent>
+                <TooltipContent>{t("nav.signOut")}</TooltipContent>
               </Tooltip>
             </form>
           )}

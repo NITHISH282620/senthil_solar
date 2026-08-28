@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
+import { getServerDictionary } from "@/lib/i18n/server";
+import { t } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/shared/language-toggle";
 
 export const metadata: Metadata = {
   title: "Login — SolarOps",
   description: "Sign in to your SolarOps operations management account",
 };
 
-export default function AuthLayout({
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const dict = await getServerDictionary();
+
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen relative">
+      {/* Language toggle — reachable before signing in, on every screen size */}
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageToggle />
+      </div>
+
       {/* Left panel — branding */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-amber-500 via-orange-500 to-red-600">
         <div className="absolute inset-0 bg-black/20" />
@@ -51,33 +61,28 @@ export default function AuthLayout({
 
           <div className="space-y-6">
             <h1 className="text-4xl font-bold leading-tight">
-              Power your operations
-              <br />
-              with solar efficiency
+              {t(dict, "auth.marketingHeadline")}
             </h1>
             <p className="text-white/80 text-lg max-w-md">
-              Manage installations, track work orders, handle billing, and
-              streamline your entire solar business from one dashboard.
+              {t(dict, "auth.marketingSubtitle")}
             </p>
             <div className="flex gap-8 text-sm">
               <div>
                 <div className="text-2xl font-bold">500+</div>
-                <div className="text-white/70">Installations</div>
+                <div className="text-white/70">{t(dict, "auth.statInstallations")}</div>
               </div>
               <div>
                 <div className="text-2xl font-bold">₹12Cr+</div>
-                <div className="text-white/70">Revenue Managed</div>
+                <div className="text-white/70">{t(dict, "auth.statRevenue")}</div>
               </div>
               <div>
                 <div className="text-2xl font-bold">99.8%</div>
-                <div className="text-white/70">Uptime</div>
+                <div className="text-white/70">{t(dict, "auth.statUptime")}</div>
               </div>
             </div>
           </div>
 
-          <p className="text-white/50 text-sm">
-            © 2026 SolarOps. All rights reserved.
-          </p>
+          <p className="text-white/50 text-sm">{t(dict, "auth.copyright")}</p>
         </div>
       </div>
 
