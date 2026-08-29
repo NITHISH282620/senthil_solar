@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { VoiceAgentLauncher } from "@/components/shared/voice-agent/voice-agent-launcher";
 import type { Profile } from "@/types/database";
 
 interface DashboardShellProps {
@@ -35,6 +36,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           </div>
         </main>
       </div>
+      <VoiceAgentLauncher user={user} />
     </div>
   );
 }
