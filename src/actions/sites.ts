@@ -147,16 +147,21 @@ export async function createSite(formData: FormData) {
 
   const supabase = await createClient();
 
-  // company_id is NOT NULL and is normally maintained by trigger from the
-  // contract; supply it up front so the insert itself is valid.
-  const { data: contract, error: contractError } = await supabase
-    .from("contracts")
-    .select("company_id")
-    .eq("id", parsed.data.contract_id)
-    .single();
+  // The client is always chosen directly. A contract, if also given, must
+  // belong to that same client — validated here, not used to derive it.
+  if (parsed.data.contract_id) {
+    const { data: contract, error: contractError } = await supabase
+      .from("contracts")
+      .select("company_id")
+      .eq("id", parsed.data.contract_id)
+      .single();
 
-  if (contractError || !contract) {
-    return { data: null, error: "Parent contract not found." };
+    if (contractError || !contract) {
+      return { data: null, error: "Selected contract not found." };
+    }
+    if ((contract as { company_id: string }).company_id !== parsed.data.company_id) {
+      return { data: null, error: "That contract belongs to a different client." };
+    }
   }
 
   const { data: siteCode, error: seqError } = await supabase.rpc(
@@ -176,7 +181,6 @@ export async function createSite(formData: FormData) {
     .insert({
       ...siteFields,
       site_code: siteCode as string,
-      company_id: (contract as { company_id: string }).company_id,
       created_by: currentUser.id,
     })
     .select("id, site_code")
@@ -195,7 +199,9 @@ export async function createSite(formData: FormData) {
   }
 
   revalidatePath("/sites");
-  revalidatePath(`/contracts/${parsed.data.contract_id}`);
+  if (parsed.data.contract_id) {
+    revalidatePath(`/contracts/${parsed.data.contract_id}`);
+  }
   return { data: data as { id: string; site_code: string }, error: null };
 }
 
@@ -210,9 +216,29 @@ export async function updateSite(id: string, formData: FormData) {
 
   const supabase = await createClient();
 
+  // Same rule as createSite: the client is authoritative from the form, a
+  // contract (if given) just has to belong to that same client.
+  if (parsed.data.contract_id) {
+    const { data: contract, error: contractError } = await supabase
+      .from("contracts")
+      .select("company_id")
+      .eq("id", parsed.data.contract_id)
+      .single();
+
+    if (contractError || !contract) {
+      return { error: "Selected contract not found." };
+    }
+    if ((contract as { company_id: string }).company_id !== parsed.data.company_id) {
+      return { error: "That contract belongs to a different client." };
+    }
+  }
+
   const { allocated_value, ...siteFields } = parsed.data;
 
-  const { error } = await supabase.from("sites").update(siteFields).eq("id", id);
+  const { error } = await supabase
+    .from("sites")
+    .update(siteFields)
+    .eq("id", id);
   if (error) return { error: error.message };
 
   const { error: commercialError } = await supabase

@@ -70,7 +70,7 @@ export default async function SitesPage({ searchParams }: PageProps) {
       {rows.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            No sites yet. Create a contract first, then add its sites.
+            No sites yet. Add your first one — pick a client to get started.
           </CardContent>
         </Card>
       ) : (

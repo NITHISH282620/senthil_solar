@@ -19,13 +19,18 @@ import { toast } from "sonner";
 import { createSite, updateSite } from "@/actions/sites";
 import type { Site } from "@/types/database";
 
+/** Sentinel for "no contract" — the Select underneath has no built-in clear action. */
+const NO_CONTRACT = "__none__";
+
 interface SiteFormProps {
   initialData?: (Site & { commercial?: { allocated_value: number } | null }) | null;
-  contracts: { id: string; contract_number: string; title: string }[];
+  /** Every contract, tagged with its client, so the picker can be scoped to whichever client is chosen. */
+  contracts: { id: string; contract_number: string; title: string; company_id: string }[];
   stages: { code: string; label: string }[];
   people: { id: string; full_name: string }[];
-  /** Preselects the parent when arriving from a contract page. */
+  /** Preselects the contract when arriving from a contract page. */
   defaultContractId?: string;
+  companies: { id: string; name: string; company_code: string }[];
 }
 
 export function SiteForm({
@@ -34,13 +39,29 @@ export function SiteForm({
   stages,
   people,
   defaultContractId,
+  companies,
 }: SiteFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
+  const [companyId, setCompanyId] = useState(initialData?.company_id ?? "");
   const [contractId, setContractId] = useState(
     initialData?.contract_id ?? defaultContractId ?? ""
   );
+  const contractsForClient = contracts.filter((c) => c.company_id === companyId);
+
+  function handleCompanyChange(next: string) {
+    setCompanyId(next);
+    // A contract that belonged to the previous client no longer applies.
+    if (contractId && !contracts.some((c) => c.id === contractId && c.company_id === next)) {
+      setContractId("");
+    }
+  }
+
+  function handleContractChange(next: string) {
+    setContractId(next === NO_CONTRACT ? "" : next);
+  }
+
   const [stage, setStage] = useState(initialData?.stage ?? "planning");
   const [status, setStatus] = useState(initialData?.status ?? "active");
   const [engineerId, setEngineerId] = useState(
@@ -51,14 +72,15 @@ export function SiteForm({
   );
 
   async function handleSubmit(formData: FormData) {
-    if (!contractId) {
-      toast.error("Choose the parent contract.");
+    if (!companyId) {
+      toast.error("Choose the client company.");
       return;
     }
 
     setLoading(true);
 
     // Base UI selects are not native controls, so post their values by hand.
+    formData.set("company_id", companyId);
     formData.set("contract_id", contractId);
     formData.set("stage", stage);
     formData.set("status", status);
@@ -95,17 +117,37 @@ export function SiteForm({
           <CardTitle>Basics</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
-            <Label>Parent contract *</Label>
-            <Select
-              value={contractId}
-              onValueChange={(v) => setContractId(v ?? "")}
-            >
+          <div className="space-y-2">
+            <Label>Client company *</Label>
+            <Select value={companyId} onValueChange={(v) => handleCompanyChange(v ?? "")}>
               <SelectTrigger>
-                <SelectValue placeholder="Which contract is this site under?" />
+                <SelectValue placeholder="Who is this site for?" />
               </SelectTrigger>
               <SelectContent>
-                {contracts.map((c) => (
+                {companies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name} ({c.company_code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Contract (optional)</Label>
+            <Select
+              value={contractId || NO_CONTRACT}
+              onValueChange={(v) => handleContractChange(v ?? NO_CONTRACT)}
+              disabled={!companyId}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={companyId ? "No contract — a one-off site" : "Pick a client first"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CONTRACT}>No contract — a one-off site</SelectItem>
+                {contractsForClient.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.contract_number} — {c.title}
                   </SelectItem>
@@ -113,7 +155,8 @@ export function SiteForm({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              The client company is inherited from the contract.
+              Only needed if this client handed you several sites under one
+              award — group them here.
             </p>
           </div>
 
@@ -182,7 +225,7 @@ export function SiteForm({
               defaultValue={initialData?.commercial?.allocated_value ?? 0}
             />
             <p className="text-xs text-muted-foreground">
-              This site&apos;s share of the contract. Drives its profit figure.
+              What this site is worth. Drives its profit figure.
             </p>
           </div>
 

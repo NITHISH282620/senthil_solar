@@ -23,12 +23,18 @@ const MONEY_ROLES = ["owner", "manager", "accountant"];
 export interface ExpenseWithRelations extends Expense {
   employee?: Pick<Profile, "id" | "full_name" | "employee_code"> | null;
   contract?: Pick<Contract, "id" | "contract_number" | "title"> | null;
+  /** Whether a bill/receipt photo has been attached via the document vault. */
+  has_documents?: boolean;
 }
+
+/** Categories where a rental or purchase bill is worth chasing down. */
+const PROOF_CATEGORIES = new Set(["equipment", "materials"]);
 
 export async function getExpenses(params?: {
   search?: string;
   status?: string;
   employee_id?: string;
+  site_id?: string;
 }): Promise<{
   data: ExpenseWithRelations[] | null;
   error: string | null;
@@ -60,10 +66,41 @@ export async function getExpenses(params?: {
     query = query.eq("status", params.status);
   }
 
+  if (params?.site_id) {
+    query = query.eq("site_id", params.site_id);
+  }
+
   const { data, error } = await query;
   if (error) return { data: null, error: error.message };
 
-  return { data: data as ExpenseWithRelations[], error: null };
+  const rows = (data ?? []) as ExpenseWithRelations[];
+
+  // Only worth the extra round trip for the categories a bill actually
+  // matters for — a fuel or tea receipt was never the point.
+  const idsNeedingProof = rows
+    .filter((r) => PROOF_CATEGORIES.has(r.category))
+    .map((r) => r.id);
+
+  if (idsNeedingProof.length > 0) {
+    const { data: docs } = await supabase
+      .from("documents")
+      .select("entity_id")
+      .eq("entity_type", "expense")
+      .in("entity_id", idsNeedingProof)
+      .is("deleted_at", null);
+
+    const withDocs = new Set(
+      ((docs ?? []) as { entity_id: string | null }[]).map((d) => d.entity_id)
+    );
+
+    for (const row of rows) {
+      if (PROOF_CATEGORIES.has(row.category)) {
+        row.has_documents = withDocs.has(row.id);
+      }
+    }
+  }
+
+  return { data: rows, error: null };
 }
 
 export async function getExpense(

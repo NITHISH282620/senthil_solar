@@ -126,7 +126,10 @@ export default async function QuotationsPage({ searchParams }: PageProps) {
                 <TableHead className="hidden lg:table-cell">
                   Valid Until
                 </TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right hidden md:table-cell">
+                  Our Quote
+                </TableHead>
+                <TableHead className="text-right">Client Agreed</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -155,8 +158,31 @@ export default async function QuotationsPage({ searchParams }: PageProps) {
                   <TableCell className="hidden lg:table-cell">
                     {formatDate(qt.valid_until)}
                   </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(qt.total_amount ?? 0)}
+                  <TableCell className="text-right hidden md:table-cell text-muted-foreground">
+                    <span
+                      className={cn((qt.difference ?? 0) !== 0 && "line-through decoration-1")}
+                    >
+                      {formatCurrency(qt.our_total ?? qt.total_amount ?? 0)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <p className="font-medium">
+                      {formatCurrency(qt.client_agreed_total ?? qt.total_amount ?? 0)}
+                    </p>
+                    {(qt.difference ?? 0) !== 0 && (
+                      <p
+                        className={cn(
+                          "text-xs",
+                          (qt.difference ?? 0) < 0 ? "text-red-600" : "text-emerald-600"
+                        )}
+                      >
+                        {(qt.difference ?? 0) < 0 ? "↓ " : "↑ "}
+                        {formatCurrency(Math.abs(qt.difference ?? 0))}
+                        {qt.our_total
+                          ? ` (${Math.abs(Math.round(((qt.difference ?? 0) / qt.our_total) * 1000) / 10)}%)`
+                          : ""}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={qt.status} />

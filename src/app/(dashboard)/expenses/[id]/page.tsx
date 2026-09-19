@@ -38,6 +38,10 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
 
   const canApprove = currentUser?.role === "owner" || currentUser?.role === "manager";
 
+  const needsProof =
+    (expense.category === "equipment" || expense.category === "materials") &&
+    (documents ?? []).length === 0;
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -149,10 +153,19 @@ export default async function ExpenseDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          <DocumentVault 
-            entityType="expense" 
-            entityId={expense.id} 
-            initialDocuments={documents ?? []} 
+          {needsProof && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              This is a{" "}
+              {expense.category === "equipment" ? "rental" : "purchase"} —
+              attach a photo of the bill below when you can. It&apos;s
+              optional, but makes this easy to justify later.
+            </div>
+          )}
+
+          <DocumentVault
+            entityType="expense"
+            entityId={expense.id}
+            initialDocuments={documents ?? []}
           />
         </div>
       </div>

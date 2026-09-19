@@ -23,6 +23,7 @@ export interface LeaveRequestWithProfile extends LeaveRequest {
 
 export async function getAttendance(params?: {
   employee_id?: string;
+  site_id?: string;
   month?: string; // Format: YYYY-MM
   date?: string;  // Format: YYYY-MM-DD
 }): Promise<{
@@ -43,6 +44,10 @@ export async function getAttendance(params?: {
     query = query.eq("employee_id", currentUser.id);
   } else if (params?.employee_id) {
     query = query.eq("employee_id", params.employee_id);
+  }
+
+  if (params?.site_id) {
+    query = query.eq("site_id", params.site_id);
   }
 
   if (params?.date) {

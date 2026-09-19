@@ -31,6 +31,8 @@ export interface SiteProfit {
   site_id: string;
   site_code: string;
   site_name: string;
+  company_id: string | null;
+  contract_id: string | null;
   stage: string;
   status: string;
   progress_percent: number;
@@ -42,6 +44,11 @@ export interface SiteProfit {
   gross_profit: number;
   margin_percent: number | null;
   assigned_workers: number;
+  /** What the client has actually paid against this site so far. */
+  client_received: number;
+  last_payment_date: string | null;
+  /** revenue_allocated - client_received. What's still owed. */
+  client_balance_due: number;
 }
 
 export interface ReceivableRow {
@@ -102,6 +109,73 @@ export async function getSiteProfitability(params?: {
   if (error) return { data: null, error: error.message };
 
   return { data: data as SiteProfit[], error: null };
+}
+
+export interface PaymentsLedgerRow extends SiteProfit {
+  company_name: string | null;
+  contract_number: string | null;
+}
+
+/**
+ * The digital replacement for the owner's old paper ledger — Name / Approved
+ * / Advance / Balance, one row per site, across every contract at once.
+ * Sites owed the most float to the top by default so the ones needing a
+ * follow-up call are the ones he sees first.
+ */
+export async function getPaymentsLedger(params?: {
+  contractId?: string;
+  companyId?: string;
+}): Promise<{ data: PaymentsLedgerRow[] | null; error: string | null }> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { data: null, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("v_site_financials")
+    .select("*")
+    .eq("status", "active")
+    .order("client_balance_due", { ascending: false, nullsFirst: false });
+
+  if (params?.contractId) query = query.eq("contract_id", params.contractId);
+  if (params?.companyId) query = query.eq("company_id", params.companyId);
+
+  const { data, error } = await query;
+  if (error) return { data: null, error: error.message };
+
+  const rows = (data ?? []) as SiteProfit[];
+  if (rows.length === 0) return { data: [], error: null };
+
+  const companyIds = [...new Set(rows.map((r) => r.company_id).filter(Boolean))] as string[];
+  const contractIds = [...new Set(rows.map((r) => r.contract_id).filter(Boolean))] as string[];
+
+  const [{ data: companies }, { data: contracts }] = await Promise.all([
+    companyIds.length
+      ? supabase.from("companies").select("id, name").in("id", companyIds)
+      : Promise.resolve({ data: [] }),
+    contractIds.length
+      ? supabase.from("contracts").select("id, contract_number").in("id", contractIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const companyById = new Map(
+    ((companies ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name])
+  );
+  const contractById = new Map(
+    ((contracts ?? []) as { id: string; contract_number: string }[]).map((c) => [
+      c.id,
+      c.contract_number,
+    ])
+  );
+
+  return {
+    data: rows.map((r) => ({
+      ...r,
+      company_name: r.company_id ? companyById.get(r.company_id) ?? null : null,
+      contract_number: r.contract_id ? contractById.get(r.contract_id) ?? null : null,
+    })),
+    error: null,
+  };
 }
 
 export async function getSiteProfit(
@@ -210,5 +284,78 @@ export async function getAttentionCounts(): Promise<{
       outstandingAdvances: advances.count ?? 0,
     },
     error: null,
+  };
+}
+
+
+
+export async function getSenthilDashboardMetrics() {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { data: null, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  const [{ data: contracts }, { data: payments }, { count: activeSitesCount }, { data: recentPayments }, { data: sitesData }] = await Promise.all([
+    supabase.from("contracts").select("contract_value").is("deleted_at", null),
+    supabase.from("payments").select("amount").eq("direction", "inbound").is("deleted_at", null),
+    supabase.from("sites").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null),
+    supabase.from("payments").select("id, amount, payment_date, notes, payment_method, company_id").eq("direction", "inbound").is("deleted_at", null).order("payment_date", { ascending: false }).limit(6),
+    supabase.from("sites").select("id, name, status, company_id, contracts(contract_value)").eq("status", "active").is("deleted_at", null)
+  ]);
+
+  const totalContracted = (contracts ?? []).reduce((sum, c) => sum + Number(c.contract_value || 0), 0);
+  const totalAdvances = (payments ?? []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const totalUnpaid = totalContracted - totalAdvances;
+  
+  // For recent payments, we need company names
+  const companyIds = [...new Set((recentPayments ?? []).map(p => p.company_id).filter(Boolean))] as string[];
+  const { data: companies } = await (companyIds.length > 0 ? supabase.from("companies").select("id, name").in("id", companyIds) : Promise.resolve({ data: [] }));
+  
+  const companyMap = new Map((companies ?? []).map(c => [c.id, c.name]));
+  
+  const formattedRecent = (recentPayments ?? []).map(p => ({
+    id: p.id,
+    amount: p.amount,
+    date: p.payment_date,
+    notes: p.notes,
+    method: p.payment_method,
+    company_name: p.company_id ? companyMap.get(p.company_id) || "Unknown Client" : "Unknown Client"
+  }));
+  
+  // For site balances, we need all payments per company
+  const siteCompanyIds = [...new Set((sitesData ?? []).map(s => s.company_id).filter(Boolean))] as string[];
+  const { data: allPayments } = await (siteCompanyIds.length > 0 ? supabase.from("payments").select("company_id, amount").eq("direction", "inbound").in("company_id", siteCompanyIds).is("deleted_at", null) : Promise.resolve({ data: [] }));
+  
+  const paymentsByCompany = new Map<string, number>();
+  (allPayments ?? []).forEach(p => {
+    if (p.company_id) {
+        paymentsByCompany.set(p.company_id, (paymentsByCompany.get(p.company_id) || 0) + Number(p.amount || 0));
+    }
+  });
+  
+  const siteBalances = (sitesData ?? []).map(site => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contractVal = (site.contracts && Array.isArray(site.contracts) && site.contracts.length > 0) ? Number(site.contracts[0].contract_value || 0) : ((site.contracts as any)?.contract_value || 0);
+    const paymentsReceived = site.company_id ? paymentsByCompany.get(site.company_id) || 0 : 0;
+    
+    return {
+        site_id: site.id,
+        site_name: site.name,
+        contract_value: contractVal,
+        payments_received: paymentsReceived,
+        balance_due: contractVal - paymentsReceived
+    };
+  }).sort((a, b) => b.balance_due - a.balance_due).slice(0, 5);
+
+  return {
+    data: {
+        totalContracted,
+        totalAdvances,
+        totalUnpaid,
+        activeSitesCount: activeSitesCount || 0,
+        recentPayments: formattedRecent,
+        siteBalances
+    },
+    error: null
   };
 }

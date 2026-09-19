@@ -424,6 +424,10 @@ export const quotationLineItemSchema = z.object({
 // deliberately absent — the database derives it from the other three.
 export const quotationDataSchema = z.object({
   company_id: z.string().uuid("Client company is required"),
+  // Set when this quotation was created for a specific site (either a site
+  // already under a contract, or a standalone one) — see sites.contract_id
+  // becoming optional. Absent for the older company-only quotations.
+  site_id: optionalUuid(),
   title: z.string().min(1, "Title is required").max(300),
   description: optionalText(2000),
   capacity_kw: optionalNumber(0),
@@ -460,6 +464,28 @@ export const quotationStatusSchema = z.object({
     "expired",
     "converted",
   ]),
+});
+
+/**
+ * What the client actually agreed to pay, distinct from the owner's ask
+ * (quotations.total_amount). Recordable any time after a quotation is sent
+ * — a client rarely accepts the ask outright, so this has to be settable
+ * independently of the full edit form, which locks once approved/converted.
+ */
+export const negotiateQuotationSchema = z.object({
+  negotiated_amount: z.coerce
+    .number()
+    .min(0, "Amount cannot be negative"),
+  negotiated_notes: optionalText(1000),
+});
+
+/**
+ * Per-line client agreement — never overwrites unit_price, the ask.
+ * quotation_items.client_line_total is GENERATED ALWAYS; writing it raises
+ * 428C9, same reason unit_price's line_total is absent above.
+ */
+export const lineNegotiationSchema = z.object({
+  client_unit_price: z.coerce.number().min(0, "Price cannot be negative"),
 });
 
 // ─── Invoices ────────────────────────────────────────────
@@ -504,12 +530,18 @@ export const paymentSchema = z.object({
 
 // ─── Sites ───────────────────────────────────────────────
 //
-// site_code and company_id are omitted on purpose: the first is allocated by
-// the database sequence, the second is derived from the parent contract.
+// site_code is omitted on purpose: it's allocated by the database sequence.
+// company_id is normally derived from contract_id (see sync_site_company())
+// but is required directly on the standalone "Quick Site" path below.
 
 export const siteSchema = z
   .object({
-    contract_id: z.string().uuid("Parent contract is required"),
+    // The client a site is for is always chosen directly. A contract is an
+    // optional label grouping several sites under one award — mirrored by
+    // sync_site_company() in the database, which validates (rather than
+    // derives) company_id when a contract is also given.
+    contract_id: optionalUuid(),
+    company_id: z.string().uuid("Client company is required"),
     name: z.string().min(1, "Site name is required").max(200),
     address: optionalText(500),
     district: optionalText(100),

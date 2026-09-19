@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, MapPin, Zap, Users, Building2 } from "lucide-react";
+import {
+  Pencil,
+  MapPin,
+  Zap,
+  Building2,
+  ClipboardList,
+  CalendarClock,
+  Wallet2,
+  FileText,
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -14,6 +23,7 @@ import { getSiteProfit } from "@/actions/dashboard";
 import { getExpenseCategories } from "@/actions/cash-book";
 import { getBankAccounts } from "@/actions/bank-accounts";
 import { getEmployees } from "@/actions/employees";
+import { getQuotations } from "@/actions/quotations";
 import { getCurrentUser } from "@/actions/auth";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -51,14 +61,15 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const canEdit = !!currentUser && ["owner", "manager"].includes(currentUser.role);
 
   // Only fetch money and picker data for the people allowed to act on it.
-  const [{ data: profit }, { data: categories }, { data: employees }] =
+  const [{ data: profit }, { data: categories }, { data: employees }, { data: quotations }] =
     seesMoney
       ? await Promise.all([
           getSiteProfit(id),
           getExpenseCategories(),
           getEmployees({ status: "active" }),
+          getQuotations({ site_id: id }),
         ])
-      : [{ data: null }, { data: null }, { data: null }];
+      : [{ data: null }, { data: null }, { data: null }, { data: null }];
 
   const stageLabel =
     (stages ?? []).find((s) => s.code === site.stage)?.label ?? site.stage;
@@ -78,6 +89,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 id: e.id,
                 full_name: e.full_name,
               }))}
+              showRecordPayment
             />
           )}
           {canEdit && (
@@ -148,8 +160,93 @@ export default async function SiteDetailPage({ params }: PageProps) {
               </span>
             </div>
           </div>
+
+          {/* Everything about this site, one tap away. */}
+          <div className="flex flex-wrap gap-2 border-t pt-3">
+            <Link
+              href={`/attendance?site_id=${site.id}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
+              Attendance
+            </Link>
+            <Link
+              href="/payroll"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              <Wallet2 className="mr-1.5 h-3.5 w-3.5" />
+              Wages / Payroll
+            </Link>
+            <Link
+              href={`/expenses?site_id=${site.id}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              <ClipboardList className="mr-1.5 h-3.5 w-3.5" />
+              Expenses
+            </Link>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Quotation(s) for this site — original ask plus any later additional
+          work, each its own commercial record. Current Project Value is
+          the sum of every approved one (syncSiteValueFromQuotation), not a
+          single overwritten figure — a later change never touches an
+          earlier approval. */}
+      {seesMoney && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Quotations</CardTitle>
+              {profit && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Current Project Value: {formatCurrency(profit.revenue_allocated ?? 0)}
+                </p>
+              )}
+            </div>
+            <Link
+              href={`/quotations/new?site_id=${site.id}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5" />
+              {quotations && quotations.length > 0 ? "Add Additional Work" : "Create Quotation"}
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {!quotations || quotations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No quotation yet — price this site&apos;s work before
+                tracking payments against it.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {quotations.map((q) => (
+                  <Link
+                    key={q.id}
+                    href={`/quotations/${q.id}`}
+                    className="flex items-center justify-between rounded-lg border p-3 text-sm hover:border-primary/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
+                        {q.title}
+                        <span className="ml-2 text-xs text-muted-foreground font-mono">
+                          {q.quotation_number}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Our Quote {formatCurrency(q.our_total ?? q.total_amount ?? 0)}
+                        {(q.difference ?? 0) !== 0 &&
+                          ` · Client Agreed ${formatCurrency(q.client_agreed_total ?? 0)}`}
+                      </p>
+                    </div>
+                    <StatusBadge status={q.status} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Profitability — the reason this page exists */}
       {seesMoney && (
@@ -208,6 +305,31 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Client Payments — the notebook's Approved / Advance / Balance, digitised */}
+      {seesMoney && profit && Number(profit.revenue_allocated) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Client Payments</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Figure label="Approved" value={Number(profit.revenue_allocated)} />
+              <Figure label="Received" value={Number(profit.client_received)} />
+              <Figure
+                label="Balance"
+                value={Number(profit.client_balance_due)}
+                tone={Number(profit.client_balance_due) > 0 ? "bad" : "good"}
+                caption={
+                  profit.last_payment_date
+                    ? `Last payment ${formatDate(profit.last_payment_date)}`
+                    : "No payment recorded yet"
+                }
+              />
+            </div>
           </CardContent>
         </Card>
       )}

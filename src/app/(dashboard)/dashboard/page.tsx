@@ -23,6 +23,7 @@ import {
   getReceivables,
   getCashInHand,
   getAttentionCounts,
+  getSenthilDashboardMetrics,
 } from "@/actions/dashboard";
 import { getSiteOptions } from "@/actions/sites";
 import { getExpenseCategories } from "@/actions/cash-book";
@@ -62,6 +63,7 @@ export default async function DashboardPage() {
     { data: sites },
     { data: categories },
     { data: employees },
+    { data: senthilMetrics },
   ] = await Promise.all([
     getDashboardToday(),
     getSiteProfitability({ limit: 5 }),
@@ -71,6 +73,7 @@ export default async function DashboardPage() {
     getSiteOptions(),
     getExpenseCategories(),
     getEmployees({ status: "active" }),
+    getSenthilDashboardMetrics(),
   ]);
 
   const { data: bankAccounts } = await getBankAccounts();
@@ -97,41 +100,28 @@ export default async function DashboardPage() {
       {/* Money and work, today */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Tile
-          label={t(dict, "dashboard.cashInHand")}
-          value={formatCurrency(cashInHand)}
-          icon={<Wallet className="h-4 w-4" />}
-          tone={cashInHand < 0 ? "bad" : "neutral"}
-          href="/cash"
+          label="Total Unpaid Money"
+          value={formatCurrency(Number(senthilMetrics?.totalUnpaid ?? 0))}
+          icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+          tone="bad"
+          href="/client-statement"
         />
         <Tile
-          label={t(dict, "dashboard.inToday")}
-          value={formatCurrency(Number(today?.cash_in_today ?? 0))}
-          hint={t(dict, "dashboard.yesterdayAmount", {
-            amount: formatCurrency(Number(today?.cash_in_yesterday ?? 0)),
-          })}
+          label="Total Advances Received"
+          value={formatCurrency(Number(senthilMetrics?.totalAdvances ?? 0))}
           icon={<ArrowDownLeft className="h-4 w-4" />}
           tone="good"
-          href="/cash?direction=in"
+          href="/payments-ledger"
         />
         <Tile
-          label={t(dict, "dashboard.outToday")}
-          value={formatCurrency(Number(today?.cash_out_today ?? 0))}
-          hint={t(dict, "dashboard.yesterdayAmount", {
-            amount: formatCurrency(Number(today?.cash_out_yesterday ?? 0)),
-          })}
-          icon={<ArrowUpRight className="h-4 w-4" />}
-          tone="bad"
-          href="/cash?direction=out"
+          label="Total Contracted Value"
+          value={formatCurrency(Number(senthilMetrics?.totalContracted ?? 0))}
+          icon={<Wallet className="h-4 w-4" />}
+          href="/contracts"
         />
         <Tile
-          label={t(dict, "dashboard.clientsOwe")}
-          value={formatCurrency(Number(today?.total_outstanding ?? 0))}
-          icon={<Receipt className="h-4 w-4" />}
-          href="/billing"
-        />
-        <Tile
-          label={t(dict, "dashboard.activeSites")}
-          value={String(today?.active_sites ?? 0)}
+          label="Active Projects"
+          value={String(senthilMetrics?.activeSitesCount ?? 0)}
           icon={<HardHat className="h-4 w-4" />}
           href="/sites"
         />
@@ -149,26 +139,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* What the business owes, and what it is holding for someone else.
-          Both were computable and shown nowhere, which is how an overpaid
-          Rs 50,000 stayed invisible. */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Tile
-          label={t(dict, "dashboard.youOwePeople")}
-          value={formatCurrency(Number(today?.owed_to_employees ?? 0))}
-          hint={t(dict, "dashboard.youOwePeopleHint")}
-          icon={<HandCoins className="h-4 w-4" />}
-          tone={Number(today?.owed_to_employees ?? 0) > 0 ? "bad" : "neutral"}
-          href="/employees"
-        />
-        <Tile
-          label={t(dict, "dashboard.clientCreditHeld")}
-          value={formatCurrency(Number(today?.client_credit_held ?? 0))}
-          hint={t(dict, "dashboard.clientCreditHeldHint")}
-          icon={<Coins className="h-4 w-4" />}
-          href="/billing"
-        />
-      </div>
+      
 
       {/* Needs attention */}
       <Card>
@@ -227,46 +198,39 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(siteProfit ?? []).length === 0 ? (
+            {(senthilMetrics?.siteBalances ?? []).length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 {t(dict, "dashboard.noActiveSites")}
               </p>
             ) : (
-              (siteProfit ?? []).map((s) => (
+              (senthilMetrics?.siteBalances ?? []).map((s) => (
                 <Link
                   key={s.site_id}
-                  href={`/sites/${s.site_id}`}
+                  href={`/client-statement/${s.site_id}`}
                   className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">
                       {s.site_name}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {t(dict, "dashboard.spentOf", {
-                        spent: formatCurrency(Number(s.total_cost)),
-                        revenue: formatCurrency(Number(s.revenue_allocated)),
-                      })}
+                    <div className="text-xs text-muted-foreground truncate">
+                      Contract: {formatCurrency(Number(s.contract_value))} | Advances: {formatCurrency(Number(s.payments_received))}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right pl-2">
                     <div
                       className={cn(
                         "text-sm font-semibold tabular-nums",
-                        Number(s.gross_profit) < 0
+                        Number(s.balance_due) > 0
                           ? "text-red-600"
                           : "text-emerald-600"
                       )}
                     >
-                      {formatCurrency(Number(s.gross_profit))}
+                      {formatCurrency(Number(s.balance_due))}
                     </div>
-                    {s.margin_percent !== null && (
-                      <div className="text-xs text-muted-foreground">
-                        {t(dict, "dashboard.marginPercent", {
-                          percent: Number(s.margin_percent),
-                        })}
-                      </div>
-                    )}
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      Balance Due
+                    </div>
                   </div>
                 </Link>
               ))
@@ -277,39 +241,36 @@ export default async function DashboardPage() {
         {/* Receivables */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t(dict, "dashboard.moneyOwedToYou")}</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><ArrowDownLeft className="h-4 w-4 text-emerald-600" /> Recent Client Advances</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(receivables ?? []).length === 0 ? (
+            {(senthilMetrics?.recentPayments ?? []).length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                {t(dict, "dashboard.nothingOutstanding")}
+                No recent payments found.
               </p>
             ) : (
-              (receivables ?? []).map((r) => (
-                <Link
-                  key={r.invoice_id}
-                  href={`/billing/${r.invoice_id}`}
+              (senthilMetrics?.recentPayments ?? []).map((p) => (
+                <div
+                  key={p.id}
                   className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">
-                      {r.company_name}
+                      {p.company_name}
                     </div>
-                    <div className="font-mono text-xs text-muted-foreground">
-                      {r.invoice_number}
+                    <div className="text-xs text-muted-foreground truncate">
+                      Via: {p.notes?.replace("Excel import: ", "") || p.method}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold tabular-nums">
-                      {formatCurrency(Number(r.balance_due))}
+                  <div className="text-right pl-2">
+                    <div className="text-sm font-semibold tabular-nums text-emerald-600">
+                      +{formatCurrency(Number(p.amount))}
                     </div>
-                    {Number(r.days_overdue) > 0 && (
-                      <div className="text-xs text-red-600">
-                        {t(dict, "dashboard.daysOverdue", { days: r.days_overdue })}
-                      </div>
-                    )}
+                    <div className="text-[10px] text-muted-foreground">
+                      {new Date(p.date).toLocaleDateString()}
+                    </div>
                   </div>
-                </Link>
+                </div>
               ))
             )}
           </CardContent>

@@ -3,20 +3,14 @@ import Link from "next/link";
 import { Pencil, Printer } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { QuotationActions } from "@/components/shared/quotation-actions";
+import { QuotationPricing } from "@/components/shared/quotation-pricing";
+import { QuotationLineItems } from "@/components/shared/quotation-line-items";
 import { DocumentVault } from "@/components/shared/document-vault";
-import { getQuotation } from "@/actions/quotations";
+import { getQuotation, getQuotationVersionHistory } from "@/actions/quotations";
 import { getDocuments } from "@/actions/documents";
 import { getCurrentUser } from "@/actions/auth";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -37,11 +31,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function QuotationDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const [{ data: quotation }, { data: documents }, currentUser] = await Promise.all([
-    getQuotation(id),
-    getDocuments("quotation", id),
-    getCurrentUser(),
-  ]);
+  const [{ data: quotation }, { data: documents }, currentUser, { data: versionHistory }] =
+    await Promise.all([
+      getQuotation(id),
+      getDocuments("quotation", id),
+      getCurrentUser(),
+      getQuotationVersionHistory(id),
+    ]);
 
   if (!quotation) {
     notFound();
@@ -54,6 +50,8 @@ export default async function QuotationDetailPage({ params }: PageProps) {
   // updateQuotation refuses an approved or converted quotation for the same
   // reason.
   const isEditable = quotation.status === "draft" || quotation.status === "sent";
+  const canNegotiateLines =
+    canEdit && (quotation.status === "sent" || quotation.status === "approved");
 
   // The actions block must stay visible for one status longer than editing
   // does. "Convert to Contract" renders only when the quotation is approved,
@@ -111,6 +109,17 @@ export default async function QuotationDetailPage({ params }: PageProps) {
                   </Link>
                 </p>
               )}
+              {quotation.site && (
+                <p className="text-sm">
+                  Site:{" "}
+                  <Link
+                    href={`/sites/${quotation.site.id}`}
+                    className="text-primary hover:underline"
+                  >
+                    {quotation.site.name}
+                  </Link>
+                </p>
+              )}
               {quotation.description && (
                 <p className="text-sm text-muted-foreground mt-2">
                   {quotation.description}
@@ -118,17 +127,24 @@ export default async function QuotationDetailPage({ params }: PageProps) {
               )}
             </div>
 
-            <div className="text-right space-y-1">
-              <h2 className="text-3xl font-bold tracking-tight mb-2 text-primary">
-                ₹{(quotation.total_amount ?? 0).toLocaleString()}
-              </h2>
+            <div className="space-y-2">
+              <QuotationPricing
+                quotationId={quotation.id}
+                status={quotation.status}
+                ourAsk={quotation.our_total ?? quotation.total_amount ?? 0}
+                clientAgreedTotal={quotation.client_agreed_total ?? quotation.total_amount ?? 0}
+                difference={quotation.difference ?? 0}
+                hasLineNegotiation={quotation.has_line_negotiation ?? false}
+                negotiatedNotes={quotation.negotiated_notes}
+                canEdit={canEdit}
+              />
               {quotation.valid_from && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground text-right">
                   Valid from: {formatDate(quotation.valid_from)}
                 </p>
               )}
               {quotation.valid_until && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground text-right">
                   Valid until: {formatDate(quotation.valid_until)}
                 </p>
               )}
@@ -189,46 +205,16 @@ export default async function QuotationDetailPage({ params }: PageProps) {
           <CardTitle className="text-base">Line Items</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Unit Price</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {quotation.quotation_items?.map((item, index) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-muted-foreground">
-                      {index + 1}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {item.description}
-                    </TableCell>
-                    <TableCell>{item.unit}</TableCell>
-                    <TableCell className="text-right">{item.quantity}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(item.unit_price)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(item.line_total ?? 0)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <QuotationLineItems
+            items={quotation.quotation_items ?? []}
+            canNegotiate={canNegotiateLines}
+          />
 
           {/* Totals */}
           <div className="mt-4 flex justify-end">
-            <div className="w-72 space-y-2">
+            <div className="w-80 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
+                <span className="text-muted-foreground">Our Subtotal</span>
                 <span>{formatCurrency(quotation.subtotal)}</span>
               </div>
               <div className="flex justify-between py-2 text-sm border-t">
@@ -243,13 +229,72 @@ export default async function QuotationDetailPage({ params }: PageProps) {
               )}
               <Separator />
               <div className="flex justify-between font-bold">
-                <span>Total</span>
-                <span className="font-bold text-base">{formatCurrency(quotation.total_amount ?? 0)}</span>
+                <span>Our Total</span>
+                <span className="font-bold text-base">
+                  {formatCurrency(quotation.our_total ?? quotation.total_amount ?? 0)}
+                </span>
               </div>
+              <div className="flex justify-between font-bold text-primary">
+                <span className="font-normal text-muted-foreground">Client Agreed Total</span>
+                <span className="text-base">
+                  {formatCurrency(
+                    quotation.client_agreed_total ?? quotation.total_amount ?? 0
+                  )}
+                </span>
+              </div>
+              {(quotation.difference ?? 0) !== 0 && (
+                <div
+                  className={cn(
+                    "flex justify-between text-sm",
+                    (quotation.difference ?? 0) < 0 ? "text-red-600" : "text-emerald-600"
+                  )}
+                >
+                  <span>Total Difference</span>
+                  <span>
+                    {formatCurrency(quotation.difference ?? 0)}
+                    {quotation.total_amount
+                      ? ` (${
+                          Math.round(
+                            (Math.abs(quotation.difference ?? 0) / quotation.total_amount) * 1000
+                          ) / 10
+                        }%)`
+                      : ""}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Version history */}
+      {versionHistory && versionHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Version History</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {versionHistory.map((v) => (
+              <Link
+                key={v.id}
+                href={`/quotations/${v.id}`}
+                className={cn(
+                  "flex items-center justify-between rounded-lg border p-3 text-sm hover:border-primary/50",
+                  v.id === quotation.id && "border-primary/50 bg-primary/5"
+                )}
+              >
+                <span className="font-medium">
+                  V{v.version} — {v.quotation_number}
+                  {v.id === quotation.id && (
+                    <span className="ml-2 text-xs text-muted-foreground">(this one)</span>
+                  )}
+                </span>
+                <StatusBadge status={v.status} />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Notes */}
       {quotation.notes && (

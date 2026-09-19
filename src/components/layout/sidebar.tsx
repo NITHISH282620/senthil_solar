@@ -21,6 +21,8 @@ import {
   HardHat,
   Banknote,
   ShieldCheck,
+  HandCoins,
+  ClipboardList,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,12 @@ const navItems: NavItem[] = [
   },
   { titleKey: "nav.sites", href: "/sites", icon: HardHat },
   {
+    titleKey: "nav.paymentsLedger",
+    href: "/payments",
+    icon: HandCoins,
+    roles: ["owner", "manager", "accountant"],
+  },
+  {
     titleKey: "nav.cashBook",
     href: "/cash",
     icon: Wallet,
@@ -107,6 +115,12 @@ const navItems: NavItem[] = [
     titleKey: "nav.payroll",
     href: "/payroll",
     icon: Banknote,
+    roles: ["owner", "manager", "accountant"],
+  },
+  {
+    titleKey: "nav.clientStatement",
+    href: "/client-statement",
+    icon: ClipboardList,
     roles: ["owner", "manager", "accountant"],
   },
 ];

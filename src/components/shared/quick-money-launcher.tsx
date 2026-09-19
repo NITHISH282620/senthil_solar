@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Wallet, HandCoins } from "lucide-react";
 import { QuickMoneySheet } from "./quick-money-sheet";
 import type { SiteOption } from "@/actions/sites";
 
@@ -14,6 +14,8 @@ interface QuickMoneyLauncherProps {
   bankAccounts?: { id: string; account_name: string; bank_name: string }[];
   /** Compact drops the labels down to icons for tight headers. */
   variant?: "full" | "compact";
+  /** Adds a one-tap "Record Payment" button pre-set to money-in / client_payment. */
+  showRecordPayment?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ export function QuickMoneyLauncher({
   lockedSiteId,
   bankAccounts = [],
   variant = "full",
+  showRecordPayment = false,
 }: QuickMoneyLauncherProps) {
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<"in" | "out">("out");
@@ -47,6 +50,16 @@ export function QuickMoneyLauncher({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
+        {showRecordPayment && (
+          <Button
+            size={variant === "compact" ? "sm" : "default"}
+            onClick={() => launch("in", "client_payment")}
+            className="bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            <HandCoins className="mr-1.5 h-4 w-4" />
+            Record Payment
+          </Button>
+        )}
         <Button
           size={variant === "compact" ? "sm" : "default"}
           onClick={() => launch("in")}

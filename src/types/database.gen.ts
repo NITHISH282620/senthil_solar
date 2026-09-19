@@ -2845,6 +2845,8 @@ export type Database = {
       }
       quotation_items: {
         Row: {
+          client_line_total: number | null
+          client_unit_price: number | null
           description: string
           hsn_sac_code: string | null
           id: string
@@ -2857,6 +2859,8 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          client_line_total?: number | null
+          client_unit_price?: number | null
           description: string
           hsn_sac_code?: string | null
           id?: string
@@ -2869,6 +2873,8 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          client_line_total?: number | null
+          client_unit_price?: number | null
           description?: string
           hsn_sac_code?: string | null
           id?: string
@@ -2904,10 +2910,14 @@ export type Database = {
           gst_percent: number
           id: string
           inverter_type: string | null
+          negotiated_amount: number | null
+          negotiated_at: string | null
+          negotiated_notes: string | null
           notes: string | null
           panel_type: string | null
           payment_terms: string | null
           quotation_number: string
+          site_id: string | null
           status: string
           subtotal: number
           supersedes_id: string | null
@@ -2933,10 +2943,14 @@ export type Database = {
           gst_percent?: number
           id?: string
           inverter_type?: string | null
+          negotiated_amount?: number | null
+          negotiated_at?: string | null
+          negotiated_notes?: string | null
           notes?: string | null
           panel_type?: string | null
           payment_terms?: string | null
           quotation_number: string
+          site_id?: string | null
           status?: string
           subtotal?: number
           supersedes_id?: string | null
@@ -2962,10 +2976,14 @@ export type Database = {
           gst_percent?: number
           id?: string
           inverter_type?: string | null
+          negotiated_amount?: number | null
+          negotiated_at?: string | null
+          negotiated_notes?: string | null
           notes?: string | null
           panel_type?: string | null
           payment_terms?: string | null
           quotation_number?: string
+          site_id?: string | null
           status?: string
           subtotal?: number
           supersedes_id?: string | null
@@ -3020,6 +3038,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_directory"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "v_site_financials"
+            referencedColumns: ["site_id"]
           },
           {
             foreignKeyName: "quotations_supersedes_id_fkey"
@@ -3603,7 +3635,7 @@ export type Database = {
           capacity_kw: number | null
           client_contact_id: string | null
           company_id: string
-          contract_id: string
+          contract_id: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -3638,7 +3670,7 @@ export type Database = {
           capacity_kw?: number | null
           client_contact_id?: string | null
           company_id: string
-          contract_id: string
+          contract_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -3673,7 +3705,7 @@ export type Database = {
           capacity_kw?: number | null
           client_contact_id?: string | null
           company_id?: string
-          contract_id?: string
+          contract_id?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -4448,11 +4480,14 @@ export type Database = {
         Row: {
           assigned_workers: number | null
           capacity_kw: number | null
+          client_balance_due: number | null
+          client_received: number | null
           company_id: string | null
           contract_id: string | null
           expense_cost: number | null
           gross_profit: number | null
           labour_cost: number | null
+          last_payment_date: string | null
           margin_percent: number | null
           material_cost: number | null
           progress_percent: number | null
@@ -4499,6 +4534,24 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "site_stages"
             referencedColumns: ["code"]
+          },
+        ]
+      }
+      v_quotation_totals: {
+        Row: {
+          client_agreed_total: number | null
+          difference: number | null
+          has_line_negotiation: boolean | null
+          our_total: number | null
+          quotation_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotation_items_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotations"
+            referencedColumns: ["id"]
           },
         ]
       }

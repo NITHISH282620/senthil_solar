@@ -28,8 +28,10 @@ import { toast } from "sonner";
 import {
   createQuotation,
   updateQuotation,
+  recordLineNegotiation,
 } from "@/actions/quotations";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { QuotationWithRelations } from "@/actions/quotations";
 
 interface LineItem {
@@ -43,6 +45,12 @@ interface LineItem {
 interface QuotationFormProps {
   quotation?: QuotationWithRelations | null;
   companies: { id: string; name: string; company_code: string }[];
+  /**
+   * Present when this quotation is being created for a specific site (from
+   * the site's own page) — locks the company to the site's client and
+   * carries site_id through so the quotation is linked back to it.
+   */
+  lockedSite?: { id: string; name: string; company_id: string; company_name: string } | null;
 }
 
 const emptyItem: LineItem = {
@@ -68,7 +76,7 @@ const emptyItem: LineItem = {
  * it removes the two things that made that possible: no native FormData
  * snapshot, and no `action` prop for React to manage a reset around.
  */
-export function QuotationForm({ quotation, companies }: QuotationFormProps) {
+export function QuotationForm({ quotation, companies, lockedSite }: QuotationFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const isEdit = !!quotation;
@@ -83,7 +91,9 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
     })) ?? [{ ...emptyItem }]
   );
 
-  const [companyId, setCompanyId] = useState(quotation?.company_id ?? "");
+  const [companyId, setCompanyId] = useState(
+    quotation?.company_id ?? lockedSite?.company_id ?? ""
+  );
   const [title, setTitle] = useState(quotation?.title ?? "");
   const [description, setDescription] = useState(quotation?.description ?? "");
   const [capacityKw, setCapacityKw] = useState(
@@ -104,6 +114,94 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
   const subtotal = items.reduce((sum, item) => sum + item.line_total, 0);
   const gstAmount = (subtotal * gstPercent) / 100;
   const totalAmount = subtotal + gstAmount - discountAmount;
+
+  // What the client actually agreed to, tracked separately from the ask.
+  // Editing the ask itself is still only this form's job (Unit Price below)
+  // — Sanctioned is saved through its own call (recordLineNegotiation) the
+  // moment a row is edited, never through the main "Update Quotation"
+  // submit, so the two business events (owner re-pricing vs. client
+  // agreeing) never share one save path.
+  const negotiatedAmount = quotation?.client_agreed_total ?? quotation?.negotiated_amount ?? null;
+  const negotiatedVariance =
+    negotiatedAmount != null && negotiatedAmount !== totalAmount
+      ? negotiatedAmount - totalAmount
+      : null;
+
+  // Sanctioned/Difference are usable once a client price could exist at
+  // all (sent or approved) — not only once one already does, so this is
+  // also where the FIRST per-line figure gets recorded.
+  const canSanction =
+    !!quotation && (quotation.status === "sent" || quotation.status === "approved");
+  // A lump-sum client figure was never broken out per line — apportioning it
+  // by each line's share of the ask is the only way to show it against work,
+  // but it's a display split, not a recorded per-line agreement, so it's
+  // marked with * until the owner overrides that specific line.
+  const lumpSumRatio =
+    negotiatedVariance != null && !quotation?.has_line_negotiation && quotation?.our_total
+      ? (quotation.client_agreed_total ?? quotation.our_total) / quotation.our_total
+      : null;
+
+  function lineComparison(index: number) {
+    const stored = quotation?.quotation_items?.[index];
+    if (!stored) return null;
+    if (stored.client_unit_price != null) {
+      const sanctioned = stored.client_line_total ?? stored.line_total ?? 0;
+      return { sanctioned, difference: sanctioned - (stored.line_total ?? 0), apportioned: false };
+    }
+    if (lumpSumRatio != null) {
+      const ourLine = stored.line_total ?? 0;
+      const sanctioned = Math.round(ourLine * lumpSumRatio * 100) / 100;
+      return { sanctioned, difference: sanctioned - ourLine, apportioned: true };
+    }
+    return null;
+  }
+
+  const [sanctionDrafts, setSanctionDrafts] = useState<Record<number, string>>({});
+  const [savingIndex, setSavingIndex] = useState<number | null>(null);
+
+  /**
+   * The client agreed to *something* for every line — either what was
+   * actually recorded (or apportioned) for it, or, absent that, the ask
+   * itself (the same fallback v_quotation_totals uses). Never blank/zero:
+   * an unset row reads as "not negotiated, so assume the ask," not as
+   * "the client agreed to pay nothing for this."
+   */
+  function sanctionDraftValue(index: number) {
+    if (index in sanctionDrafts) return sanctionDrafts[index];
+    const cmp = lineComparison(index);
+    if (cmp) return String(cmp.sanctioned);
+    const stored = quotation?.quotation_items?.[index];
+    return stored ? String(stored.line_total ?? 0) : "";
+  }
+
+  async function saveSanction(index: number) {
+    const stored = quotation?.quotation_items?.[index];
+    const draft = sanctionDrafts[index];
+    if (!stored || draft == null) return;
+
+    const sanctionedTotal = Number(draft);
+    if (!Number.isFinite(sanctionedTotal) || sanctionedTotal < 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+    // Sanctioned here is the line's total; the action stores a unit price.
+    const clientUnitPrice = stored.quantity > 0 ? sanctionedTotal / stored.quantity : 0;
+
+    setSavingIndex(index);
+    const result = await recordLineNegotiation(stored.id, clientUnitPrice);
+    setSavingIndex(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    setSanctionDrafts((d) => {
+      const next = { ...d };
+      delete next[index];
+      return next;
+    });
+    toast.success("Sanctioned amount recorded for this line.");
+    router.refresh();
+  }
 
   function addItem() {
     setItems([...items, { ...emptyItem }]);
@@ -161,6 +259,7 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
 
     const quotationData: Record<string, unknown> = {
       company_id: companyId,
+      site_id: lockedSite?.id ?? quotation?.site_id ?? null,
       title: title.trim(),
       description: description.trim() || null,
       capacity_kw: capacityKw ? Number(capacityKw) : null,
@@ -199,7 +298,7 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
         ? "Quotation updated successfully"
         : "Quotation created successfully"
     );
-    router.push("/quotations");
+    router.push(lockedSite ? `/sites/${lockedSite.id}` : "/quotations");
     router.refresh();
   }
 
@@ -211,25 +310,38 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
           <CardTitle className="text-base">Quotation Details</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="company_id">Company *</Label>
-            <Select
-              value={companyId}
-              onValueChange={(v) => setCompanyId(v ?? "")}
-              disabled={loading}
-            >
-              <SelectTrigger id="company_id">
-                <SelectValue placeholder="Select company" />
-              </SelectTrigger>
-              <SelectContent>
-                {companies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.company_code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {lockedSite ? (
+            <div className="space-y-2">
+              <Label>Site</Label>
+              <p className="text-sm font-medium">
+                {lockedSite.name}
+                <span className="text-muted-foreground font-normal">
+                  {" "}
+                  — {lockedSite.company_name}
+                </span>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="company_id">Company *</Label>
+              <Select
+                value={companyId}
+                onValueChange={(v) => setCompanyId(v ?? "")}
+                disabled={loading}
+              >
+                <SelectTrigger id="company_id">
+                  <SelectValue placeholder="Select company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} ({c.company_code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="title">Title *</Label>
@@ -345,6 +457,12 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
                   <TableHead className="w-[80px]">Qty</TableHead>
                   <TableHead className="w-[120px]">Unit Price</TableHead>
                   <TableHead className="w-[120px] text-right">Total</TableHead>
+                  {canSanction && (
+                    <>
+                      <TableHead className="w-[130px] text-right">Sanctioned</TableHead>
+                      <TableHead className="w-[120px] text-right">Difference</TableHead>
+                    </>
+                  )}
                   <TableHead className="w-[40px]" />
                 </TableRow>
               </TableHeader>
@@ -401,6 +519,57 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
                     <TableCell className="text-right font-medium">
                       {formatCurrency(item.line_total)}
                     </TableCell>
+                    {canSanction && (() => {
+                      const stored = quotation?.quotation_items?.[index];
+                      const cmp = lineComparison(index);
+                      const draftRaw = sanctionDraftValue(index);
+                      const draftNum = Number(draftRaw);
+                      const liveDiff = stored && Number.isFinite(draftNum)
+                        ? draftNum - (stored.line_total ?? 0)
+                        : cmp?.difference ?? null;
+
+                      return (
+                        <>
+                          <TableCell className="text-right">
+                            {stored ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={draftRaw}
+                                  onChange={(e) =>
+                                    setSanctionDrafts((d) => ({ ...d, [index]: e.target.value }))
+                                  }
+                                  onBlur={() => {
+                                    if (index in sanctionDrafts) saveSanction(index);
+                                  }}
+                                  disabled={savingIndex === index}
+                                  className="h-8 w-24 text-right"
+                                />
+                                {savingIndex === index && (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                )}
+                                {cmp?.apportioned && !(index in sanctionDrafts) && (
+                                  <span className="text-muted-foreground">*</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "text-right text-sm",
+                              liveDiff != null && liveDiff < 0 && "text-red-600",
+                              liveDiff != null && liveDiff > 0 && "text-emerald-600"
+                            )}
+                          >
+                            {liveDiff != null ? formatCurrency(liveDiff) : "—"}
+                          </TableCell>
+                        </>
+                      );
+                    })()}
                     <TableCell>
                       {items.length > 1 && (
                         <Button
@@ -417,9 +586,52 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
                     </TableCell>
                   </TableRow>
                 ))}
+                {canSanction && (() => {
+                  let totalSanctioned = 0;
+                  let anySanctioned = false;
+                  items.forEach((_, index) => {
+                    const stored = quotation?.quotation_items?.[index];
+                    if (!stored) return;
+                    const draftRaw = sanctionDraftValue(index);
+                    const draftNum = Number(draftRaw);
+                    if (Number.isFinite(draftNum)) {
+                      totalSanctioned += draftNum;
+                      anySanctioned = true;
+                    }
+                  });
+                  const totalDiff = anySanctioned ? totalSanctioned - subtotal : null;
+
+                  return (
+                    <TableRow className="font-bold">
+                      <TableCell colSpan={4}>Total</TableCell>
+                      <TableCell className="text-right">{formatCurrency(subtotal)}</TableCell>
+                      <TableCell className="text-right">
+                        {anySanctioned ? formatCurrency(totalSanctioned) : "—"}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right",
+                          totalDiff != null && totalDiff < 0 && "text-red-600",
+                          totalDiff != null && totalDiff > 0 && "text-emerald-600"
+                        )}
+                      >
+                        {totalDiff != null ? formatCurrency(totalDiff) : "—"}
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  );
+                })()}
               </TableBody>
             </Table>
           </div>
+          {lumpSumRatio != null && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              * The client agreed one total figure, not itemized per line — this is that
+              amount split across lines by their share of the ask, not a per-line agreement.
+              Record what they actually said per line from the quotation&apos;s own page for
+              an exact breakdown instead.
+            </p>
+          )}
 
           {/* Totals */}
           <div className="mt-4 flex justify-end">
@@ -460,9 +672,34 @@ export function QuotationForm({ quotation, companies }: QuotationFormProps) {
               </div>
               <Separator />
               <div className="flex justify-between text-base font-bold">
-                <span>Total</span>
+                <span>{negotiatedAmount != null ? "Our Total" : "Total"}</span>
                 <span>{formatCurrency(totalAmount)}</span>
               </div>
+              {negotiatedAmount != null && (
+                <div className="flex justify-between text-base font-bold">
+                  <span className="font-normal text-muted-foreground">
+                    Client Agreed
+                  </span>
+                  <span className="text-primary">
+                    {formatCurrency(negotiatedAmount)}
+                  </span>
+                </div>
+              )}
+              {negotiatedVariance != null && negotiatedVariance !== 0 && (
+                <div
+                  className={cn(
+                    "text-right text-xs",
+                    negotiatedVariance < 0 ? "text-red-600" : "text-emerald-600"
+                  )}
+                >
+                  {negotiatedVariance < 0 ? "↓ " : "↑ "}
+                  {formatCurrency(Math.abs(negotiatedVariance))}
+                  {totalAmount
+                    ? ` (${Math.abs(Math.round((negotiatedVariance / totalAmount) * 1000) / 10)}%)`
+                    : ""}{" "}
+                  vs. our total
+                </div>
+              )}
             </div>
           </div>
         </CardContent>

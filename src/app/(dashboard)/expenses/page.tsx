@@ -38,10 +38,11 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const search = typeof resolvedParams.search === "string" ? resolvedParams.search : undefined;
   const status = typeof resolvedParams.status === "string" ? resolvedParams.status : undefined;
+  const siteId = typeof resolvedParams.site_id === "string" ? resolvedParams.site_id : undefined;
 
   const [currentUser, { data: expenses }] = await Promise.all([
     getCurrentUser(),
-    getExpenses({ search, status }),
+    getExpenses({ search, status, site_id: siteId }),
   ]);
 
   return (
@@ -130,7 +131,19 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
                       </div>
                     </TableCell>
                   )}
-                  <TableCell className="capitalize">{expense.category}</TableCell>
+                  <TableCell className="capitalize">
+                    <div className="flex items-center gap-1.5">
+                      {expense.category}
+                      {expense.has_documents === false && (
+                        <span
+                          title="No bill/receipt photo attached yet"
+                          className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 normal-case"
+                        >
+                          No proof
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {formatDate(expense.created_at)}
                   </TableCell>

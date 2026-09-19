@@ -39,12 +39,17 @@ export default async function AttendancePage({ searchParams }: PageProps) {
 
   const today = todayInIndia();
   const dateParam = typeof resolvedParams.date === "string" ? resolvedParams.date : today;
+  const siteIdParam = typeof resolvedParams.site_id === "string" ? resolvedParams.site_id : undefined;
 
   const [{ data: attendanceData }, { data: sites }, { data: settings }] = await Promise.all([
-    getAttendance({ date: dateParam }),
+    getAttendance({ date: dateParam, site_id: siteIdParam }),
     getSiteOptions(),
     getCompanySettings(),
   ]);
+
+  const filteredSiteName = siteIdParam
+    ? sites?.find((s) => s.id === siteIdParam)?.name
+    : undefined;
 
   // "HH:mm:ss" from Postgres -> "HH:mm" for the <input type="time"> pickers.
   const shiftStart = settings?.shift_start_time?.slice(0, 5) ?? "09:00";
@@ -56,9 +61,13 @@ export default async function AttendancePage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <PageHeader 
-        title="Team Attendance" 
-        description={`Attendance records for ${formatDate(dateParam, "EEEE, dd MMM yyyy")}`}
+      <PageHeader
+        title="Team Attendance"
+        description={
+          filteredSiteName
+            ? `${filteredSiteName} — ${formatDate(dateParam, "EEEE, dd MMM yyyy")}`
+            : `Attendance records for ${formatDate(dateParam, "EEEE, dd MMM yyyy")}`
+        }
       />
 
       <CrewAttendanceSheet
